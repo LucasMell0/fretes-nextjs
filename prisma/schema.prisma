@@ -1,0 +1,395 @@
+// Sistema de Cotação de Fretes - Prisma Schema
+// Convertido do schema SQL original para Prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =====================================================
+// USUÁRIOS
+// =====================================================
+model Usuario {
+  id               Int      @id @default(autoincrement())
+  nome             String   @db.VarChar(100)
+  email            String   @unique @db.VarChar(100)
+  senha            String   @db.VarChar(255)
+  tipo             TipoUsuario @default(USUARIO)
+  ativo            Boolean  @default(true)
+  dataCriacao      DateTime @default(now()) @map("data_criacao")
+  dataAtualizacao  DateTime @updatedAt @map("data_atualizacao")
+  
+  cotacoes         CotacaoLog[]
+  integracoes      UsuarioIntegracaoCanal[]
+
+  @@map("usuarios")
+}
+
+enum TipoUsuario {
+  ADMIN @map("admin")
+  USUARIO @map("usuario")
+
+  @@map("tipo_usuario")
+}
+
+// =====================================================
+// TRANSPORTADORAS
+// =====================================================
+model Transportadora {
+  id               Int      @id @default(autoincrement())
+  nome             String   @db.VarChar(200)
+  fatorCubagem     Decimal  @default(300) @db.Decimal(10, 4) @map("fator_cubagem")
+  margemLucro      Decimal  @default(0) @db.Decimal(5, 2) @map("margem_lucro")
+  ativo            Boolean  @default(true)
+  dataCriacao      DateTime @default(now()) @map("data_criacao")
+  dataAtualizacao  DateTime @updatedAt @map("data_atualizacao")
+  
+  regioes          TransportadoraRegiao[]
+  produtoCubagens  ProdutoTransportadoraCubagem[]
+  cotacoes         CotacaoLog[]
+
+  @@map("transportadoras")
+}
+
+// =====================================================
+// REGIÕES DAS TRANSPORTADORAS
+// =====================================================
+model TransportadoraRegiao {
+  id               Int      @id @default(autoincrement())
+  transportadoraId Int      @map("transportadora_id")
+  nome             String   @db.VarChar(100)
+  cepInicio        String   @db.VarChar(9) @map("cep_inicio")
+  cepFim           String   @db.VarChar(9) @map("cep_fim")
+  ativo            Boolean  @default(true)
+  dataCriacao      DateTime @default(now()) @map("data_criacao")
+  dataAtualizacao  DateTime @updatedAt @map("data_atualizacao")
+  
+  transportadora   Transportadora @relation(fields: [transportadoraId], references: [id], onDelete: Cascade)
+  precos           TransportadoraRegiaoPreco[]
+  kgAdicional      TransportadoraRegiaoKgAdicional?
+  taxas            TransportadoraRegiaoTaxa?
+
+  @@map("transportadora_regioes")
+}
+
+// =====================================================
+// FAIXAS DE PESO E PREÇOS
+// =====================================================
+model TransportadoraRegiaoPreco {
+  id               Int      @id @default(autoincrement())
+  transportadoraRegiaoId Int @map("transportadora_regiao_id")
+  pesoInicial      Decimal  @db.Decimal(10, 2) @map("peso_inicial")
+  pesoFinal        Decimal  @db.Decimal(10, 2) @map("peso_final")
+  valor            Decimal  @db.Decimal(10, 2)
+  prazo            Int
+  dataCriacao      DateTime @default(now()) @map("data_criacao")
+  dataAtualizacao  DateTime @updatedAt @map("data_atualizacao")
+  
+  regiao           TransportadoraRegiao @relation(fields: [transportadoraRegiaoId], references: [id], onDelete: Cascade)
+
+  @@map("transportadora_regiao_precos")
+}
+
+// =====================================================
+// KG ADICIONAL
+// =====================================================
+model TransportadoraRegiaoKgAdicional {
+  id               Int      @id @default(autoincrement())
+  transportadoraRegiaoId Int @unique @map("transportadora_regiao_id")
+  valorKgAdicional Decimal  @db.Decimal(10, 4) @map("valor_kg_adicional")
+  dataCriacao      DateTime @default(now()) @map("data_criacao")
+  
+  regiao           TransportadoraRegiao @relation(fields: [transportadoraRegiaoId], references: [id], onDelete: Cascade)
+
+  @@map("transportadora_regiao_kg_adicional")
+}
+
+// =====================================================
+// TAXAS DA REGIÃO
+// =====================================================
+model TransportadoraRegiaoTaxa {
+  id               Int      @id @default(autoincrement())
+  transportadoraRegiaoId Int @unique @map("transportadora_regiao_id")
+  
+  // Frete Valor
+  freteTipo        TipoTaxa @default(VALOR) @map("frete_valor_tipo")
+  freteValor       Decimal  @default(0) @db.Decimal(10, 4) @map("frete_valor")
+  freteMinimo      Decimal  @default(0) @db.Decimal(10, 2) @map("frete_valor_minimo")
+  
+  // GRIS
+  grisTipo         TipoTaxa @default(PERCENTUAL) @map("gris_tipo")
+  grisValor        Decimal  @default(0) @db.Decimal(10, 4) @map("gris_valor")
+  grisMinimo       Decimal  @default(0) @db.Decimal(10, 2) @map("gris_minimo")
+  
+  // Despacho
+  despachoTipo     TipoTaxa @default(VALOR) @map("despacho_tipo")
+  despachoValor    Decimal  @default(0) @db.Decimal(10, 4) @map("despacho_valor")
+  despachoMinimo   Decimal  @default(0) @db.Decimal(10, 2) @map("despacho_minimo")
+  
+  // Pedágio (valor fixo por 100kg)
+  pedagioValor     Decimal  @default(0) @db.Decimal(10, 2) @map("pedagio_valor")
+  
+  // TAS
+  tasTipo          TipoTaxa @default(PERCENTUAL) @map("tas_tipo")
+  tasValor         Decimal  @default(0) @db.Decimal(10, 4) @map("tas_valor")
+  tasMinimo        Decimal  @default(0) @db.Decimal(10, 2) @map("tas_minimo")
+  
+  // TDA
+  tdaAtivo         Boolean  @default(false) @map("tda_ativo")
+  tdaTipo          TipoTaxa @default(VALOR) @map("tda_tipo")
+  tdaValor         Decimal  @default(0) @db.Decimal(10, 4) @map("tda_valor")
+  tdaMinimo        Decimal  @default(0) @db.Decimal(10, 2) @map("tda_minimo")
+  
+  // TDE
+  tdeAtivo         Boolean  @default(false) @map("tde_ativo")
+  tdeTipo          TipoTaxa @default(VALOR) @map("tde_tipo")
+  tdeValor         Decimal  @default(0) @db.Decimal(10, 4) @map("tde_valor")
+  tdeMinimo        Decimal  @default(0) @db.Decimal(10, 2) @map("tde_minimo")
+  
+  // TRF
+  trfAtivo         Boolean  @default(false) @map("trf_ativo")
+  trfTipo          TipoTaxa @default(VALOR) @map("trf_tipo")
+  trfValor         Decimal  @default(0) @db.Decimal(10, 4) @map("trf_valor")
+  trfMinimo        Decimal  @default(0) @db.Decimal(10, 2) @map("trf_minimo")
+  
+  // Seguro Fluvial
+  seguroFluvialAtivo Boolean @default(false) @map("seguro_fluvial_ativo")
+  seguroFluvialTipo  TipoTaxa @default(PERCENTUAL) @map("seguro_fluvial_tipo")
+  seguroFluvialValor Decimal  @default(0) @db.Decimal(10, 4) @map("seguro_fluvial_valor")
+  seguroFluvialMinimo Decimal @default(0) @db.Decimal(10, 2) @map("seguro_fluvial_minimo")
+  
+  // TRT
+  trtAtivo         Boolean  @default(false) @map("trt_ativo")
+  trtTipo          TipoTaxa @default(VALOR) @map("trt_tipo")
+  trtValor         Decimal  @default(0) @db.Decimal(10, 4) @map("trt_valor")
+  trtMinimo        Decimal  @default(0) @db.Decimal(10, 2) @map("trt_minimo")
+  
+  // SUFRAMA
+  suframaAtivo     Boolean  @default(false) @map("suframa_ativo")
+  suframaTipo      TipoTaxa @default(PERCENTUAL) @map("suframa_tipo")
+  suframaValor     Decimal  @default(0) @db.Decimal(10, 4) @map("suframa_valor")
+  suframaMinimo    Decimal  @default(0) @db.Decimal(10, 2) @map("suframa_minimo")
+  
+  // ICMS
+  icms             Decimal  @default(0) @db.Decimal(5, 2)
+  
+  dataCriacao      DateTime @default(now()) @map("data_criacao")
+  dataAtualizacao  DateTime @updatedAt @map("data_atualizacao")
+  
+  regiao           TransportadoraRegiao @relation(fields: [transportadoraRegiaoId], references: [id], onDelete: Cascade)
+
+  @@map("transportadora_regiao_taxas")
+}
+
+enum TipoTaxa {
+  PERCENTUAL @map("percentual")
+  VALOR @map("valor")
+
+  @@map("tipo_taxa")
+}
+
+// =====================================================
+// PRODUTOS
+// =====================================================
+model Produto {
+  id               Int      @id @default(autoincrement())
+  produtoPaiId     Int?     @map("produto_pai_id")
+  nome             String   @db.VarChar(200)
+  sku              String   @unique @db.VarChar(50)
+  peso             Decimal  @db.Decimal(10, 4)
+  cubagem          Decimal  @db.Decimal(10, 6)
+  crossDocking     Int      @default(0) @map("cross_docking")
+  estoque          Int      @default(0)
+  ativo            Boolean  @default(true)
+  dataCriacao      DateTime @default(now()) @map("data_criacao")
+  dataAtualizacao  DateTime @updatedAt @map("data_atualizacao")
+  
+  produtoPai       Produto?  @relation("ProdutoVariacoes", fields: [produtoPaiId], references: [id], onDelete: Cascade)
+  variacoes        Produto[] @relation("ProdutoVariacoes")
+  atributos        ProdutoVariacao[]
+  cubagens         ProdutoTransportadoraCubagem[]
+  cotacoesProdutos CotacaoLogProduto[]
+
+  @@map("produtos")
+}
+
+// =====================================================
+// ATRIBUTOS DE VARIAÇÕES
+// =====================================================
+model ProdutoVariacao {
+  id               Int      @id @default(autoincrement())
+  produtoId        Int      @map("produto_id")
+  atributo         String   @db.VarChar(100)
+  valor            String   @db.VarChar(200)
+  
+  produto          Produto  @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+
+  @@map("produto_variacoes")
+}
+
+// =====================================================
+// CUBAGEM POR TRANSPORTADORA
+// =====================================================
+model ProdutoTransportadoraCubagem {
+  id               Int      @id @default(autoincrement())
+  produtoId        Int      @map("produto_id")
+  transportadoraId Int      @map("transportadora_id")
+  cubagem          Decimal  @db.Decimal(10, 6)
+  dataCriacao      DateTime @default(now()) @map("data_criacao")
+  dataAtualizacao  DateTime @updatedAt @map("data_atualizacao")
+  
+  produto          Produto @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+  transportadora   Transportadora @relation(fields: [transportadoraId], references: [id], onDelete: Cascade)
+
+  @@unique([produtoId, transportadoraId])
+  @@map("produto_transportadora_cubagem")
+}
+
+// =====================================================
+// LOGS DE COTAÇÕES
+// =====================================================
+model CotacaoLog {
+  id                    Int      @id @default(autoincrement())
+  cep                   String   @db.VarChar(9)
+  origem                String   @default("MANUAL") @db.VarChar(20)
+  marketplace           String?  @db.VarChar(100)
+  produtosJson          String   @db.Text @map("produtos_json")
+  resultadoJson         String   @db.Text @map("resultado_json")
+  melhorTransportadoraId Int?    @map("melhor_transportadora_id")
+  melhorValor           Decimal? @db.Decimal(10, 2) @map("melhor_valor")
+  melhorPrazo           Int?     @map("melhor_prazo")
+  totalTransportadoras  Int      @default(0) @map("total_transportadoras")
+  ipOrigem              String?  @db.VarChar(45) @map("ip_origem")
+  userAgent             String?  @db.Text @map("user_agent")
+  usuarioId             Int?     @map("usuario_id")
+  dataCotacao           DateTime @default(now()) @map("data_cotacao")
+  
+  usuario               Usuario? @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+  transportadora        Transportadora? @relation(fields: [melhorTransportadoraId], references: [id], onDelete: SetNull)
+  produtos              CotacaoLogProduto[]
+
+  @@index([cep])
+  @@index([origem])
+  @@index([dataCotacao])
+  @@index([usuarioId])
+  @@index([marketplace])
+  @@map("cotacoes_log")
+}
+
+model CotacaoLogProduto {
+  id               Int      @id @default(autoincrement())
+  cotacaoLogId     Int      @map("cotacao_log_id")
+  produtoId        Int      @map("produto_id")
+  produtoNome      String   @db.VarChar(200) @map("produto_nome")
+  produtoSku       String   @db.VarChar(50) @map("produto_sku")
+  quantidade       Int
+  pesoTotal        Decimal  @db.Decimal(10, 4) @map("peso_total")
+  
+  cotacao          CotacaoLog @relation(fields: [cotacaoLogId], references: [id], onDelete: Cascade)
+  produto          Produto @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+
+  @@index([cotacaoLogId])
+  @@index([produtoId])
+  @@map("cotacoes_log_produtos")
+}
+
+// =====================================================
+// INTEGRAÇÕES
+// =====================================================
+
+// Canais de integração disponíveis no sistema
+model CanalIntegracao {
+  id                Int      @id @default(autoincrement())
+  nome              String   @unique @db.VarChar(100)
+  slug              String   @unique @db.VarChar(50)
+  tipo              TipoCanal
+  logoUrl           String?  @map("logo_url") @db.Text
+  
+  // Configuração do endpoint
+  endpointPattern   String   @map("endpoint_pattern") @db.VarChar(255)
+  metodosHttp       String[] @map("metodos_http")
+  
+  // Exemplos
+  payloadExemplo    Json?    @map("payload_exemplo")
+  responseExemplo   Json?    @map("response_exemplo")
+  
+  ativo             Boolean  @default(true)
+  criadoEm          DateTime @default(now()) @map("criado_em")
+  
+  integracoesUsuarios UsuarioIntegracaoCanal[]
+  
+  @@map("canais_integracao")
+}
+
+enum TipoCanal {
+  MARKETPLACE
+  ERP
+  WEBHOOK
+  
+  @@map("tipo_canal")
+}
+
+// Integrações ativas dos usuários
+model UsuarioIntegracaoCanal {
+  id                      Int      @id @default(autoincrement())
+  usuarioId               Int      @map("usuario_id")
+  canalId                 Int      @map("canal_id")
+  
+  // Token único para autenticação (vai na URL)
+  token                   String   @unique @db.VarChar(64)
+  
+  // Status
+  ativo                   Boolean  @default(true)
+  status                  String   @default("ativo") @db.VarChar(20)
+  
+  // Metadata
+  config                  Json?
+  ultimaRequisicao        DateTime? @map("ultima_requisicao")
+  totalRequisicoes        Int      @default(0) @map("total_requisicoes")
+  
+  // Auditoria
+  criadoEm                DateTime @default(now()) @map("criado_em")
+  atualizadoEm            DateTime @updatedAt @map("atualizado_em")
+  
+  usuario                 Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  canal                   CanalIntegracao @relation(fields: [canalId], references: [id], onDelete: Cascade)
+  logs                    IntegracaoLog[]
+  
+  @@unique([usuarioId, canalId])
+  @@map("usuarios_integracao_canais")
+}
+
+// Log de requisições (auditoria e debug)
+model IntegracaoLog {
+  id                      BigInt   @id @default(autoincrement())
+  usuarioCanalId          Int      @map("usuario_canal_id")
+  
+  // Request info
+  metodo                  String   @db.VarChar(10)
+  endpoint                String   @db.VarChar(255)
+  queryParams             Json?    @map("query_params")
+  body                    Json?
+  headers                 Json?
+  ipOrigem                String?  @map("ip_origem") @db.VarChar(45)
+  
+  // Response info
+  statusCode              Int?     @map("status_code")
+  responseBody            Json?    @map("response_body")
+  tempoProcessamentoMs    Int?     @map("tempo_processamento_ms")
+  
+  // Erro (se houver)
+  erro                    String?  @db.Text
+  
+  criadoEm                DateTime @default(now()) @map("criado_em")
+  
+  usuarioCanal            UsuarioIntegracaoCanal @relation(fields: [usuarioCanalId], references: [id], onDelete: Cascade)
+  
+  @@index([usuarioCanalId])
+  @@index([criadoEm])
+  @@index([statusCode])
+  @@map("integracao_logs")
+}
