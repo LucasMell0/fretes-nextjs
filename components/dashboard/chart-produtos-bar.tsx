@@ -22,12 +22,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-
 interface ProdutoData {
   nome: string
   sku: string
   total_cotacoes: number
-  data_cotacao: string
 }
 
 interface ChartProdutosBarProps {
@@ -44,56 +42,33 @@ const chartConfig = {
   },
 } satisfies ChartConfig
 
-export const ChartProdutosBar = React.memo(function ChartProdutosBar({ data }: ChartProdutosBarProps) {
+export const ChartProdutosBar = React.memo(function ChartProdutosBar({ data: initialData }: ChartProdutosBarProps) {
   const [timeRange, setTimeRange] = React.useState("7d")
+  const [data, setData] = React.useState(initialData)
+  const [loading, setLoading] = React.useState(false)
 
-  const filteredAndGroupedData = React.useMemo(() => {
-    if (!data || data.length === 0) return []
-
-    const now = new Date()
-    let daysToSubtract = 7
-
-    if (timeRange === "30d") {
-      daysToSubtract = 30
-    } else if (timeRange === "90d") {
-      daysToSubtract = 90
-    }
-
-    const startDate = new Date(now)
-    startDate.setDate(startDate.getDate() - daysToSubtract)
-
-    // Filtrar por período
-    const filteredData = data.filter((item) => {
-      const itemDate = new Date(item.data_cotacao)
-      return itemDate >= startDate
-    })
-
-    // Agrupar por produto e contar
-    const produtosCount = new Map<string, { nome: string; sku: string; count: number }>()
-
-    filteredData.forEach((item) => {
-      const existing = produtosCount.get(item.sku)
-      if (existing) {
-        existing.count++
-      } else {
-        produtosCount.set(item.sku, {
-          nome: item.nome,
-          sku: item.sku,
-          count: 1,
-        })
+  // Buscar dados quando período mudar
+  React.useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true)
+      try {
+        const dias = timeRange === "7d" ? 7 : timeRange === "30d" ? 30 : 90
+        const res = await fetch(`/api/dashboard/stats?dias=${dias}`)
+        const stats = await res.json()
+        setData(stats.topProdutos || [])
+      } catch (error) {
+        console.error('Erro ao buscar dados:', error)
+      } finally {
+        setLoading(false)
       }
-    })
+    }
+    fetchData()
+  }, [timeRange])
 
-    // Converter para array, ordenar e pegar top 5
-    return Array.from(produtosCount.values())
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5)
-      .map((p) => ({
-        nome: p.nome,
-        sku: p.sku,
-        total_cotacoes: p.count,
-      }))
-  }, [data, timeRange])
+  const chartData = React.useMemo(() => {
+    if (!data || data.length === 0) return []
+    return data
+  }, [data])
 
   return (
     <Card>
@@ -123,7 +98,11 @@ export const ChartProdutosBar = React.memo(function ChartProdutosBar({ data }: C
         </Select>
       </CardHeader>
       <CardContent>
-        {filteredAndGroupedData.length === 0 ? (
+        {loading ? (
+          <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+            Carregando...
+          </div>
+        ) : chartData.length === 0 ? (
           <div className="flex items-center justify-center h-[300px] text-muted-foreground">
             Nenhum dado disponível para o período selecionado
           </div>
@@ -131,7 +110,7 @@ export const ChartProdutosBar = React.memo(function ChartProdutosBar({ data }: C
           <ChartContainer config={chartConfig} className="h-[300px] w-full">
             <BarChart
               accessibilityLayer
-              data={filteredAndGroupedData}
+              data={chartData}
               layout="vertical"
               margin={{
                 right: 40,

@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { logger } from '@/lib/logger'
 import { z } from 'zod'
+import { parseRouteId } from '@/lib/utils/parse'
+import { verifyOwnership } from '@/lib/utils/ownership'
+import { withAuthTyped } from '@/lib/middleware/auth'
 
 const transportadoraSchema = z.object({
   nome: z.string().min(3).optional(),
@@ -9,41 +13,59 @@ const transportadoraSchema = z.object({
   ativo: z.boolean().optional(),
 })
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+interface RouteParams {
+  id: string
+}
+
+export const GET = withAuthTyped<RouteParams>(async (req, { userId }, params) => {
   try {
-    const transportadora = await prisma.transportadora.findUnique({
-      where: { id: parseInt(params.id) },
-      include: {
+    const transportadoraId = parseRouteId(params!.id)
+
+    const transportadora = await verifyOwnership<any>(
+      prisma.transportadora,
+      transportadoraId,
+      userId,
+      {
         regioes: true,
         _count: { select: { regioes: true } },
-      },
-    })
+      }
+    )
 
     if (!transportadora) {
       return NextResponse.json(
-        { erro: 'Transportadora não encontrada' },
+        { erro: 'Transportadora não encontrada ou sem permissão' },
         { status: 404 }
       )
     }
 
     return NextResponse.json(transportadora)
   } catch (error) {
+    logger.error('Erro ao buscar transportadora:', error)
     return NextResponse.json(
       { erro: 'Erro ao buscar transportadora' },
       { status: 500 }
     )
   }
-}
+})
 
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export const PUT = withAuthTyped<RouteParams>(async (req, { userId }, params) => {
   try {
-    const body = await request.json()
+    const transportadoraId = parseRouteId(params!.id)
+
+    const transportadora = await verifyOwnership(
+      prisma.transportadora,
+      transportadoraId,
+      userId
+    )
+
+    if (!transportadora) {
+      return NextResponse.json(
+        { erro: 'Transportadora não encontrada ou sem permissão' },
+        { status: 404 }
+      )
+    }
+
+    const body = await req.json()
     const validation = transportadoraSchema.safeParse(body)
 
     if (!validation.success) {
@@ -53,34 +75,48 @@ export async function PUT(
       )
     }
 
-    const transportadora = await prisma.transportadora.update({
-      where: { id: parseInt(params.id) },
+    const updated = await prisma.transportadora.update({
+      where: { id: transportadoraId },
       data: validation.data,
     })
 
-    return NextResponse.json(transportadora)
+    return NextResponse.json(updated)
   } catch (error) {
+    logger.error('Erro ao atualizar transportadora:', error)
     return NextResponse.json(
       { erro: 'Erro ao atualizar transportadora' },
       { status: 500 }
     )
   }
-}
+})
 
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export const DELETE = withAuthTyped<RouteParams>(async (req, { userId }, params) => {
   try {
+    const transportadoraId = parseRouteId(params!.id)
+
+    const transportadora = await verifyOwnership(
+      prisma.transportadora,
+      transportadoraId,
+      userId
+    )
+
+    if (!transportadora) {
+      return NextResponse.json(
+        { erro: 'Transportadora não encontrada ou sem permissão' },
+        { status: 404 }
+      )
+    }
+
     await prisma.transportadora.delete({
-      where: { id: parseInt(params.id) },
+      where: { id: transportadoraId }
     })
 
     return NextResponse.json({ sucesso: true })
   } catch (error) {
+    logger.error('Erro ao deletar transportadora:', error)
     return NextResponse.json(
       { erro: 'Erro ao deletar transportadora' },
       { status: 500 }
     )
   }
-}
+})

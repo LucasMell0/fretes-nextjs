@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { logger } from '@/lib/logger'
 import { z } from 'zod'
+import { withAuthTyped } from '@/lib/middleware/auth'
+import { parseRouteId } from '@/lib/utils/parse'
+import { verifyOwnership } from '@/lib/utils/ownership'
 import { verificarSobreposicaoFaixa } from '@/lib/validators/faixa-peso.validator'
+import type { TransportadoraRegiaoWithRelations } from '@/lib/types/prisma-helpers'
+
+interface RouteParams {
+  id: string
+}
 
 const precoSchema = z.object({
   pesoInicial: z.number().min(0),
@@ -10,23 +19,22 @@ const precoSchema = z.object({
   prazo: z.number().int().min(0),
 })
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export const GET = withAuthTyped<RouteParams>(async (req, { userId }, params) => {
   try {
-    const regiaoId = parseInt(params.id)
+    const regiaoId = parseRouteId(params!.id)
 
-    const regiao = await prisma.transportadoraRegiao.findUnique({
-      where: { id: regiaoId },
-      include: {
+    const regiao = await verifyOwnership<TransportadoraRegiaoWithRelations>(
+      prisma.transportadoraRegiao,
+      regiaoId,
+      userId,
+      {
         transportadora: true,
         precos: {
           orderBy: { pesoInicial: 'asc' },
         },
         kgAdicional: true,
-      },
-    })
+      }
+    )
 
     if (!regiao) {
       return NextResponse.json(
@@ -41,20 +49,18 @@ export async function GET(
       kgAdicional: regiao.kgAdicional,
     })
   } catch (error) {
+    logger.error('Erro ao buscar preços:', error)
     return NextResponse.json(
       { erro: 'Erro ao buscar preços' },
       { status: 500 }
     )
   }
-}
+})
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export const POST = withAuthTyped<RouteParams>(async (req, { userId }, params) => {
   try {
-    const regiaoId = parseInt(params.id)
-    const body = await request.json()
+    const regiaoId = parseRouteId(params!.id)
+    const body = await req.json()
 
     const validation = precoSchema.safeParse(body)
     if (!validation.success) {
@@ -64,14 +70,15 @@ export async function POST(
       )
     }
 
-    // Verificar se região existe
-    const regiao = await prisma.transportadoraRegiao.findUnique({
-      where: { id: regiaoId },
-    })
+    const regiao = await verifyOwnership(
+      prisma.transportadoraRegiao,
+      regiaoId,
+      userId
+    )
 
     if (!regiao) {
       return NextResponse.json(
-        { erro: 'Região não encontrada' },
+        { erro: 'Região não encontrada ou sem permissão' },
         { status: 404 }
       )
     }
@@ -108,10 +115,10 @@ export async function POST(
 
     return NextResponse.json(preco, { status: 201 })
   } catch (error) {
-    console.error('Erro ao criar preço:', error)
+    logger.error('Erro ao criar preço:', error)
     return NextResponse.json(
       { erro: 'Erro ao criar preço' },
       { status: 500 }
     )
   }
-}
+})

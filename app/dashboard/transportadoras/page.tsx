@@ -27,6 +27,7 @@ import { usePagination } from '@/hooks/use-pagination'
 import { PaginationWrapper } from '@/components/ui/pagination-wrapper'
 import { Switch } from '@/components/ui/switch'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { Checkbox } from '@/components/ui/checkbox'
 
 interface Transportadora {
   id: number
@@ -43,12 +44,14 @@ export default function TransportadorasPage() {
   const { toast } = useToast()
   const [transportadoras, setTransportadoras] = useState<Transportadora[]>([])
   const [loading, setLoading] = useState(true)
+  const [selecionados, setSelecionados] = useState<Set<number>>(new Set())
   
   const pagination = usePagination(transportadoras, 10)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editando, setEditando] = useState<Transportadora | null>(null)
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false)
   const [transportadoraParaExcluir, setTransportadoraParaExcluir] = useState<number | null>(null)
+  const [confirmDeleteMultipleOpen, setConfirmDeleteMultipleOpen] = useState(false)
   const [formData, setFormData] = useState({
     nome: '',
     fatorCubagem: 300,
@@ -85,6 +88,24 @@ export default function TransportadorasPage() {
   useEffect(() => {
     carregarTransportadoras()
   }, [])
+
+  const toggleSelecionado = (id: number) => {
+    const novoSet = new Set(selecionados)
+    if (novoSet.has(id)) {
+      novoSet.delete(id)
+    } else {
+      novoSet.add(id)
+    }
+    setSelecionados(novoSet)
+  }
+
+  const selecionarTodos = () => {
+    if (selecionados.size === pagination.paginatedItems.length && pagination.paginatedItems.length > 0) {
+      setSelecionados(new Set())
+    } else {
+      setSelecionados(new Set(pagination.paginatedItems.map(t => t.id)))
+    }
+  }
 
   const abrirDialogNovo = () => {
     setEditando(null)
@@ -142,6 +163,32 @@ export default function TransportadorasPage() {
     setConfirmDialogOpen(true)
   }
 
+  const deletarSelecionados = async () => {
+    if (selecionados.size === 0) return
+
+    try {
+      const deletePromises = Array.from(selecionados).map(id =>
+        fetch(`/api/transportadoras/${id}`, { method: 'DELETE' })
+      )
+
+      await Promise.all(deletePromises)
+
+      toast({
+        title: 'Transportadoras deletadas!',
+        description: `${selecionados.size} transportadora(s) deletada(s) com sucesso`,
+      })
+
+      setSelecionados(new Set())
+      setConfirmDeleteMultipleOpen(false)
+      carregarTransportadoras()
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao deletar transportadoras',
+      })
+    }
+  }
+
   const confirmarExclusao = async () => {
     if (!transportadoraParaExcluir) return
 
@@ -185,16 +232,33 @@ export default function TransportadorasPage() {
           <h2 className="text-3xl font-bold">Transportadoras</h2>
           <p className="text-muted-foreground">Gerencie as transportadoras cadastradas</p>
         </div>
-        <Button onClick={abrirDialogNovo}>
-          <Plus className="mr-2 h-4 w-4" />
-          Nova Transportadora
-        </Button>
+        <div className="flex gap-2">
+          {selecionados.size > 0 && (
+            <Button 
+              variant="destructive" 
+              onClick={() => setConfirmDeleteMultipleOpen(true)}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Deletar Selecionados ({selecionados.size})
+            </Button>
+          )}
+          <Button onClick={abrirDialogNovo}>
+            <Plus className="mr-2 h-4 w-4" />
+            Nova Transportadora
+          </Button>
+        </div>
       </div>
 
       <Card>
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-12">
+                <Checkbox
+                  checked={selecionados.size === pagination.paginatedItems.length && pagination.paginatedItems.length > 0}
+                  onCheckedChange={selecionarTodos}
+                />
+              </TableHead>
               <TableHead>Nome</TableHead>
               <TableHead>Fator Cubagem</TableHead>
               <TableHead>Margem Lucro (%)</TableHead>
@@ -206,6 +270,12 @@ export default function TransportadorasPage() {
           <TableBody>
             {pagination.paginatedItems.map((t) => (
               <TableRow key={t.id}>
+                <TableCell>
+                  <Checkbox
+                    checked={selecionados.has(t.id)}
+                    onCheckedChange={() => toggleSelecionado(t.id)}
+                  />
+                </TableCell>
                 <TableCell className="font-medium">{t.nome}</TableCell>
                 <TableCell>{Number(t.fatorCubagem)}</TableCell>
                 <TableCell>{Number(t.margemLucro)}%</TableCell>
@@ -317,6 +387,16 @@ export default function TransportadorasPage() {
         onConfirm={confirmarExclusao}
         title="Excluir transportadora"
         description="Tem certeza que deseja excluir esta transportadora? Esta ação não pode ser desfeita."
+      />
+
+      <ConfirmDialog
+        open={confirmDeleteMultipleOpen}
+        onOpenChange={setConfirmDeleteMultipleOpen}
+        onConfirm={deletarSelecionados}
+        title={`Excluir ${selecionados.size} transportadora(s)`}
+        description={`Tem certeza que deseja excluir ${selecionados.size} transportadora(s) selecionada(s)? Esta ação não pode ser desfeita.`}
+        confirmText="Excluir Todas"
+        cancelText="Cancelar"
       />
     </div>
   )

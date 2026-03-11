@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { CotacaoService } from '@/lib/services/cotacao.service'
+import { rateLimitMiddleware } from '@/lib/rate-limit'
+import { logger } from '@/lib/logger'
 
 /**
  * API de Cotação de Frete - Anymarket
@@ -42,13 +44,26 @@ export async function POST(
   request: NextRequest,
   { params }: { params: { token: string } }
 ) {
-  const startTime = Date.now()
-  
+  const inicio = Date.now()
+  let integracao: any = null
+
   try {
+    // Rate limiting por token: 60 requisições por minuto
+    const rateLimitResponse = rateLimitMiddleware(request, {
+      maxRequests: 60,
+      windowSeconds: 60,
+      identifier: params.token // Rate limit por token específico
+    })
+    
+    if (rateLimitResponse) {
+      logger.warn(`Rate limit excedido para token ${params.token}`)
+      return rateLimitResponse
+    }
+
     const { token } = params
 
     // 1. Validar token e obter integração
-    const integracao = await prisma.usuarioIntegracaoCanal.findUnique({
+    integracao = await prisma.usuarioIntegracaoCanal.findUnique({
       where: { token },
       include: {
         usuario: true,
@@ -57,7 +72,7 @@ export async function POST(
     })
 
     if (!integracao || !integracao.ativo) {
-      await salvarLog(null, request, 401, 'Invalid or inactive token', Date.now() - startTime)
+      await salvarLog(null, request, 401, 'Invalid or inactive token', Date.now() - inicio)
       return NextResponse.json(
         { error: 'Invalid or inactive token' },
         { status: 401 }
@@ -69,7 +84,7 @@ export async function POST(
     const validationError = validateInput(body)
     
     if (validationError) {
-      await salvarLog(integracao.id, request, 400, validationError, Date.now() - startTime)
+      await salvarLog(integracao.id, request, 400, validationError, Date.now() - inicio)
       return NextResponse.json(
         { error: validationError },
         { status: 400 }
@@ -80,12 +95,13 @@ export async function POST(
     const cep = body.zipCode.replace(/\D/g, '')
     const marketplace = body.marketplace || 'Anymarket'
 
-    // 4. Buscar produtos por SKU
+    // 4. Buscar produtos por SKU (FILTRADO por usuarioId para isolamento multi-tenant)
     const skus = body.products.map((p: any) => p.sku)
     const produtos = await prisma.produto.findMany({
       where: {
         sku: { in: skus },
         ativo: true,
+        usuarioId: integracao.usuarioId,
       },
     })
 
@@ -103,13 +119,13 @@ export async function POST(
     // 5. Se não encontrou produtos, retornar vazio
     if (produtosParaCotar.length === 0) {
       const response = { items: [] }
-      await salvarLog(integracao.id, request, 200, response, Date.now() - startTime)
+      await salvarLog(integracao.id, request, 200, response, Date.now() - inicio)
       return NextResponse.json(response)
     }
 
-    // 6. Realizar cotação
+    // 6. Realizar cotação (com isolamento multi-tenant)
     const cotacaoService = new CotacaoService()
-    const cotacoes = await cotacaoService.cotar(cep, produtosParaCotar)
+    const cotacoes = await cotacaoService.cotar(cep, produtosParaCotar, integracao.usuarioId)
 
     // 7. Formatar resposta no padrão Anymarket
     const response = formatarResposta(cotacoes)
@@ -125,7 +141,8 @@ export async function POST(
     )
 
     // 9. Salvar log da requisição
-    await salvarLog(integracao.id, request, 200, response, Date.now() - startTime)
+    const tempoProcessamento = Date.now() - inicio
+    await salvarLog(integracao.id, request, 200, response, tempoProcessamento)
 
     // 10. Atualizar estatísticas da integração
     await prisma.usuarioIntegracaoCanal.update({
@@ -139,7 +156,7 @@ export async function POST(
     return NextResponse.json(response)
 
   } catch (error) {
-    console.error('Erro no endpoint Anymarket:', error)
+    logger.error('Erro no endpoint Anymarket:', error)
     
     return NextResponse.json(
       { error: 'Internal server error' },
@@ -238,7 +255,7 @@ async function salvarLog(
       },
     })
   } catch (error) {
-    console.error('Erro ao salvar log:', error)
+    logger.error('Erro ao salvar log:', error)
   }
 }
 

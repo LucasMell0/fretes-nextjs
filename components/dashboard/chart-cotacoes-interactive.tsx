@@ -41,29 +41,33 @@ const chartConfig = {
   },
 } satisfies ChartConfig
 
-export const ChartCotacoesInteractive = React.memo(function ChartCotacoesInteractive({ data }: ChartCotacoesInteractiveProps) {
+export const ChartCotacoesInteractive = React.memo(function ChartCotacoesInteractive({ data: initialData }: ChartCotacoesInteractiveProps) {
   const [timeRange, setTimeRange] = React.useState("7d")
+  const [data, setData] = React.useState(initialData)
+  const [loading, setLoading] = React.useState(false)
+
+  // Buscar dados quando período mudar
+  React.useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true)
+      try {
+        const dias = timeRange === "7d" ? 7 : timeRange === "30d" ? 30 : 90
+        const res = await fetch(`/api/dashboard/stats?dias=${dias}`)
+        const stats = await res.json()
+        setData(stats.grafico || [])
+      } catch (error) {
+        console.error('Erro ao buscar dados:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchData()
+  }, [timeRange])
 
   const filteredData = React.useMemo(() => {
     if (!data || data.length === 0) return []
-    
-    const now = new Date()
-    let daysToSubtract = 7
-
-    if (timeRange === "30d") {
-      daysToSubtract = 30
-    } else if (timeRange === "90d") {
-      daysToSubtract = 90
-    }
-
-    const startDate = new Date(now)
-    startDate.setDate(startDate.getDate() - daysToSubtract)
-
-    return data.filter((item) => {
-      const itemDate = new Date(item.data)
-      return itemDate >= startDate
-    })
-  }, [data, timeRange])
+    return data
+  }, [data])
 
   return (
     <Card>

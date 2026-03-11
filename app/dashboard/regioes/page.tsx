@@ -38,6 +38,7 @@ import { PaginationWrapper } from '@/components/ui/pagination-wrapper'
 import { Switch } from '@/components/ui/switch'
 import { Combobox } from '@/components/ui/combobox'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { Checkbox } from '@/components/ui/checkbox'
 
 interface Transportadora {
   id: number
@@ -66,10 +67,12 @@ export default function RegioesPage() {
   const [regioes, setRegioes] = useState<Regiao[]>([])
   const [transportadoras, setTransportadoras] = useState<Transportadora[]>([])
   const [loading, setLoading] = useState(true)
+  const [selecionados, setSelecionados] = useState<Set<number>>(new Set())
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editando, setEditando] = useState<Regiao | null>(null)
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false)
   const [regiaoParaExcluir, setRegiaoParaExcluir] = useState<number | null>(null)
+  const [confirmDeleteMultipleOpen, setConfirmDeleteMultipleOpen] = useState(false)
   const [dialogImportarOpen, setDialogImportarOpen] = useState(false)
   const [transportadoraSelecionada, setTransportadoraSelecionada] = useState<number>(0)
   
@@ -141,14 +144,32 @@ export default function RegioesPage() {
     }
   }
 
-  const formatarCep = (valor: string) => {
+  const formatarCep = (cep: string) => {
+    return cep.replace(/(\d{5})(\d{3})/, '$1-$2')
+  }
+
+  const limparCep = (valor: string) => {
     const numeros = valor.replace(/\D/g, '')
     if (numeros.length <= 5) return numeros
     return `${numeros.slice(0, 5)}-${numeros.slice(5, 8)}`
   }
 
-  const limparCep = (cep: string) => {
-    return cep.replace(/\D/g, '')
+  const toggleSelecionado = (id: number) => {
+    const novoSet = new Set(selecionados)
+    if (novoSet.has(id)) {
+      novoSet.delete(id)
+    } else {
+      novoSet.add(id)
+    }
+    setSelecionados(novoSet)
+  }
+
+  const selecionarTodos = () => {
+    if (selecionados.size === pagination.paginatedItems.length && pagination.paginatedItems.length > 0) {
+      setSelecionados(new Set())
+    } else {
+      setSelecionados(new Set(pagination.paginatedItems.map(r => r.id)))
+    }
   }
 
   const abrirDialogNovo = () => {
@@ -220,6 +241,32 @@ export default function RegioesPage() {
     }
   }
 
+  const deletarSelecionados = async () => {
+    if (selecionados.size === 0) return
+
+    try {
+      const deletePromises = Array.from(selecionados).map(id =>
+        fetch(`/api/regioes/${id}`, { method: 'DELETE' })
+      )
+
+      await Promise.all(deletePromises)
+
+      toast({
+        title: 'Regiões deletadas!',
+        description: `${selecionados.size} região(ões) deletada(s) com sucesso`,
+      })
+
+      setSelecionados(new Set())
+      setConfirmDeleteMultipleOpen(false)
+      carregarDados()
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao deletar regiões',
+      })
+    }
+  }
+
   const iniciarExclusao = (id: number) => {
     setRegiaoParaExcluir(id)
     setConfirmDialogOpen(true)
@@ -269,6 +316,15 @@ export default function RegioesPage() {
           <p className="text-muted-foreground">Gerencie as regiões e faixas de CEP</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {selecionados.size > 0 && (
+            <Button 
+              variant="destructive" 
+              onClick={() => setConfirmDeleteMultipleOpen(true)}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Deletar Selecionados ({selecionados.size})
+            </Button>
+          )}
           <Button 
             variant="outline"
             onClick={() => {
@@ -340,6 +396,12 @@ export default function RegioesPage() {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-12">
+                <Checkbox
+                  checked={selecionados.size === pagination.paginatedItems.length && pagination.paginatedItems.length > 0}
+                  onCheckedChange={selecionarTodos}
+                />
+              </TableHead>
               <TableHead>Nome</TableHead>
               <TableHead>Transportadora</TableHead>
               <TableHead>CEP Início</TableHead>
@@ -352,6 +414,12 @@ export default function RegioesPage() {
           <TableBody>
             {pagination.paginatedItems.map((r) => (
               <TableRow key={r.id}>
+                <TableCell>
+                  <Checkbox
+                    checked={selecionados.has(r.id)}
+                    onCheckedChange={() => toggleSelecionado(r.id)}
+                  />
+                </TableCell>
                 <TableCell className="font-medium">{r.nome}</TableCell>
                 <TableCell>{r.transportadora.nome}</TableCell>
                 <TableCell className="font-mono">{formatarCep(r.cepInicio)}</TableCell>
@@ -489,6 +557,16 @@ export default function RegioesPage() {
         onConfirm={confirmarExclusao}
         title="Excluir região"
         description="Tem certeza que deseja excluir esta região? Esta ação não pode ser desfeita."
+      />
+
+      <ConfirmDialog
+        open={confirmDeleteMultipleOpen}
+        onOpenChange={setConfirmDeleteMultipleOpen}
+        onConfirm={deletarSelecionados}
+        title={`Excluir ${selecionados.size} região(ões)`}
+        description={`Tem certeza que deseja excluir ${selecionados.size} região(ões) selecionada(s)? Esta ação não pode ser desfeita.`}
+        confirmText="Excluir Todas"
+        cancelText="Cancelar"
       />
 
       <Dialog open={dialogImportarOpen} onOpenChange={setDialogImportarOpen}>

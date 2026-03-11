@@ -1,13 +1,14 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/use-toast'
-import { Calculator, Loader2, Package } from 'lucide-react'
+import { Calculator, Loader2, Package, Search, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Badge } from '@/components/ui/badge'
 
 interface ProdutoDB {
   id: number
@@ -16,6 +17,13 @@ interface ProdutoDB {
   peso: number
   cubagem: number
   ativo: boolean
+  produtoPai?: {
+    id: number
+    nome: string
+    peso: number
+    cubagem: number
+    usarDadosPaiParaVariacoes: boolean
+  }
 }
 
 interface ProdutoSelecionado {
@@ -56,6 +64,9 @@ export default function CotacaoPage() {
   const [loading, setLoading] = useState(false)
   const [loadingProdutos, setLoadingProdutos] = useState(true)
   const [resultados, setResultados] = useState<ResultadoCotacao[]>([])
+  const [busca, setBusca] = useState('')
+  const [paginaAtual, setPaginaAtual] = useState(1)
+  const itensPorPagina = 10
 
   useEffect(() => {
     carregarProdutos()
@@ -101,33 +112,39 @@ export default function CotacaoPage() {
     }
   }
 
-  const toggleProduto = (sku: string) => {
-    const novaSeleção = new Map(produtosSelecionados)
-    if (novaSeleção.has(sku)) {
-      novaSeleção.delete(sku)
-    } else {
-      novaSeleção.set(sku, { quantidade: 1, valor: 0 })
-    }
-    setProdutosSelecionados(novaSeleção)
-  }
+  const toggleProduto = useCallback((sku: string) => {
+    setProdutosSelecionados(prev => {
+      const novaSeleção = new Map(prev)
+      if (novaSeleção.has(sku)) {
+        novaSeleção.delete(sku)
+      } else {
+        novaSeleção.set(sku, { quantidade: 1, valor: 0 })
+      }
+      return novaSeleção
+    })
+  }, [])
 
-  const atualizarQuantidade = (sku: string, quantidade: number) => {
-    const novaSeleção = new Map(produtosSelecionados)
-    const atual = novaSeleção.get(sku)
-    if (quantidade > 0 && atual) {
-      novaSeleção.set(sku, { ...atual, quantidade })
-    }
-    setProdutosSelecionados(novaSeleção)
-  }
+  const atualizarQuantidade = useCallback((sku: string, quantidade: number) => {
+    setProdutosSelecionados(prev => {
+      const novaSeleção = new Map(prev)
+      const atual = novaSeleção.get(sku)
+      if (quantidade > 0 && atual) {
+        novaSeleção.set(sku, { ...atual, quantidade })
+      }
+      return novaSeleção
+    })
+  }, [])
 
-  const atualizarValor = (sku: string, valor: number) => {
-    const novaSeleção = new Map(produtosSelecionados)
-    const atual = novaSeleção.get(sku)
-    if (atual) {
-      novaSeleção.set(sku, { ...atual, valor })
-    }
-    setProdutosSelecionados(novaSeleção)
-  }
+  const atualizarValor = useCallback((sku: string, valor: number) => {
+    setProdutosSelecionados(prev => {
+      const novaSeleção = new Map(prev)
+      const atual = novaSeleção.get(sku)
+      if (atual) {
+        novaSeleção.set(sku, { ...atual, valor })
+      }
+      return novaSeleção
+    })
+  }, [])
 
   const formatarCep = (valor: string) => {
     const numeros = valor.replace(/\D/g, '')
@@ -136,6 +153,39 @@ export default function CotacaoPage() {
     }
     return `${numeros.slice(0, 5)}-${numeros.slice(5, 8)}`
   }
+
+  const obterDadosExibicao = useCallback((produto: ProdutoDB) => {
+    const usarDadosPai = produto.produtoPai && produto.produtoPai.usarDadosPaiParaVariacoes
+    return {
+      peso: usarDadosPai && produto.produtoPai ? produto.produtoPai.peso : produto.peso,
+      cubagem: usarDadosPai && produto.produtoPai ? produto.produtoPai.cubagem : produto.cubagem,
+      usandoDadosPai: usarDadosPai || false
+    }
+  }, [])
+
+  // Filtrar produtos por busca
+  const produtosFiltrados = useMemo(() => {
+    if (!busca.trim()) return produtosDisponiveis
+    
+    const termo = busca.toLowerCase()
+    return produtosDisponiveis.filter(p => 
+      p.nome.toLowerCase().includes(termo) ||
+      p.sku.toLowerCase().includes(termo)
+    )
+  }, [produtosDisponiveis, busca])
+
+  // Paginação
+  const totalPaginas = Math.ceil(produtosFiltrados.length / itensPorPagina)
+  const produtosPaginados = useMemo(() => {
+    const inicio = (paginaAtual - 1) * itensPorPagina
+    const fim = inicio + itensPorPagina
+    return produtosFiltrados.slice(inicio, fim)
+  }, [produtosFiltrados, paginaAtual, itensPorPagina])
+
+  // Reset página ao buscar
+  useEffect(() => {
+    setPaginaAtual(1)
+  }, [busca])
 
   const realizarCotacao = async () => {
     if (!cep) {
@@ -166,7 +216,7 @@ export default function CotacaoPage() {
     }))
 
     try {
-      const response = await fetch('/api/v1/cotacao', {
+      const response = await fetch('/api/cotacoes/cotar', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -231,35 +281,73 @@ export default function CotacaoPage() {
             <div className="space-y-2">
               <Label>Produtos</Label>
               
+              {/* Campo de busca */}
+              <div className="relative">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar por nome ou SKU..."
+                  value={busca}
+                  onChange={(e) => setBusca(e.target.value)}
+                  className="pl-8"
+                />
+              </div>
+              
               {loadingProdutos ? (
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="h-6 w-6 animate-spin" />
                 </div>
-              ) : produtosDisponiveis.length === 0 ? (
+              ) : produtosFiltrados.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <Package className="mx-auto h-12 w-12 mb-2 text-muted-foreground" />
-                  <p>Nenhum produto cadastrado</p>
+                  <p>{busca ? 'Nenhum produto encontrado' : 'Nenhum produto cadastrado'}</p>
                 </div>
               ) : (
-                <div className="max-h-96 overflow-y-auto border rounded-lg">
-                  {produtosDisponiveis.map((produto) => (
-                    <div
-                      key={produto.sku}
-                      className="flex items-center gap-3 p-3 border-b last:border-b-0 hover:bg-accent/50"
-                    >
-                      <Checkbox
-                        id={`produto-${produto.sku}`}
-                        checked={produtosSelecionados.has(produto.sku)}
-                        onCheckedChange={() => toggleProduto(produto.sku)}
-                      />
-                      <label
-                        htmlFor={`produto-${produto.sku}`}
-                        className="flex-1 cursor-pointer"
+                <div className="border rounded-lg">
+                  <div className="text-xs text-muted-foreground p-2 border-b bg-muted/50 flex items-center justify-between">
+                    <span>{produtosFiltrados.length} produto(s) {busca && `encontrado(s)`}</span>
+                    {totalPaginas > 1 && (
+                      <span>Página {paginaAtual} de {totalPaginas}</span>
+                    )}
+                  </div>
+                  <div className="max-h-96 overflow-y-auto">
+                    {produtosPaginados.map((produto) => {
+                    const dadosExibicao = obterDadosExibicao(produto)
+                    return (
+                      <div
+                        key={produto.sku}
+                        className="flex items-center gap-3 p-3 border-b last:border-b-0 hover:bg-accent/50"
                       >
-                        <div className="font-medium">{produto.nome}</div>
-                        <div className="text-xs text-muted-foreground">
-                          SKU: {produto.sku} | {Number(produto.peso).toFixed(2)} kg | {Number(produto.cubagem).toFixed(4)} m³
-                        </div>
+                        <Checkbox
+                          id={`produto-${produto.sku}`}
+                          checked={produtosSelecionados.has(produto.sku)}
+                          onCheckedChange={() => toggleProduto(produto.sku)}
+                        />
+                        <label
+                          htmlFor={`produto-${produto.sku}`}
+                          className="flex-1 cursor-pointer"
+                        >
+                          <div className="font-medium">{produto.nome}</div>
+                          <div className="text-xs text-muted-foreground flex items-center gap-1 flex-wrap">
+                            <span>SKU: {produto.sku}</span>
+                            <span>|</span>
+                            <span className="flex items-center gap-1">
+                              {Number(dadosExibicao.peso).toFixed(2)} kg
+                              {dadosExibicao.usandoDadosPai && (
+                                <Badge variant="outline" className="text-xs px-1 py-0 h-3">
+                                  Pai
+                                </Badge>
+                              )}
+                            </span>
+                            <span>|</span>
+                            <span className="flex items-center gap-1">
+                              {Number(dadosExibicao.cubagem).toFixed(4)} m³
+                              {dadosExibicao.usandoDadosPai && (
+                                <Badge variant="outline" className="text-xs px-1 py-0 h-3">
+                                  Pai
+                                </Badge>
+                              )}
+                            </span>
+                          </div>
                       </label>
                       {produtosSelecionados.has(produto.sku) && (
                         <div className="flex gap-2">
@@ -291,7 +379,36 @@ export default function CotacaoPage() {
                         </div>
                       )}
                     </div>
-                  ))}
+                    )
+                  })}
+                  </div>
+                  
+                  {/* Paginação */}
+                  {totalPaginas > 1 && (
+                    <div className="flex items-center justify-between p-2 border-t bg-muted/30">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPaginaAtual(p => Math.max(1, p - 1))}
+                        disabled={paginaAtual === 1}
+                      >
+                        <ChevronLeft className="h-4 w-4 mr-1" />
+                        Anterior
+                      </Button>
+                      <span className="text-sm text-muted-foreground">
+                        {paginaAtual} / {totalPaginas}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPaginaAtual(p => Math.min(totalPaginas, p + 1))}
+                        disabled={paginaAtual === totalPaginas}
+                      >
+                        Próxima
+                        <ChevronRight className="h-4 w-4 ml-1" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
               

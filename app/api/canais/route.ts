@@ -1,9 +1,11 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { logger } from '@/lib/logger'
+import { withAuth } from '@/lib/middleware/auth'
 
 export const revalidate = 60
 
-export async function GET() {
+export const GET = withAuth(async (req, { userId }) => {
   try {
     const canais = await prisma.canalIntegracao.findMany({
       where: {
@@ -28,10 +30,10 @@ export async function GET() {
 
     return NextResponse.json(canais)
   } catch (error) {
-    console.error('Erro ao buscar canais:', error)
+    logger.error('Erro ao buscar canais:', error)
     return NextResponse.json(
-      { erro: 'Erro ao buscar canais de integração' },
+      { erro: 'Erro ao buscar canais' },
       { status: 500 }
     )
   }
-}
+})

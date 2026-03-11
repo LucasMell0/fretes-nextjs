@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -188,7 +189,7 @@ export default function RelatoriosPage() {
               <TableHead>Data</TableHead>
               <TableHead>CEP</TableHead>
               <TableHead>Origem</TableHead>
-              <TableHead>Transportadora</TableHead>
+              <TableHead>Melhor Transportadora</TableHead>
               <TableHead>Valor</TableHead>
               <TableHead>Prazo</TableHead>
               <TableHead>Opções</TableHead>

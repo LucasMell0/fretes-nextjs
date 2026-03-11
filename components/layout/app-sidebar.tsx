@@ -194,9 +194,11 @@ export function AppSidebar({ user }: AppSidebarProps) {
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuGroup>
-                  <DropdownMenuItem className="cursor-pointer">
-                    <User2 className="mr-2 h-4 w-4" />
-                    Conta
+                  <DropdownMenuItem className="cursor-pointer" asChild>
+                    <Link href="/dashboard/conta">
+                      <User2 className="mr-2 h-4 w-4" />
+                      Conta
+                    </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem className="cursor-pointer">
                     <CreditCard className="mr-2 h-4 w-4" />

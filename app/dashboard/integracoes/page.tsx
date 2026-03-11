@@ -9,7 +9,8 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/components/ui/use-toast'
-import { Loader2, Copy, Check } from 'lucide-react'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { Package, Loader2, Copy, Check, Settings, AlertCircle, Plus, Trash2, RefreshCw, CheckCircle2 } from 'lucide-react'
 
 interface Canal {
   id: number
@@ -26,13 +27,22 @@ interface Integracao {
   canalId: number
   token: string
   ativo: boolean
-  status: string
+  status?: string
+  configurado?: boolean
   ultimaRequisicao: string | null
+  accessToken?: string | null
+  refreshToken?: string | null
+  tokenExpiresAt?: string | null
+  criadoEm?: string
   totalRequisicoes: number
   canal: Canal
   _count: {
     logs: number
   }
+}
+
+interface ConfiguracaoBling {
+  apiKey: string
 }
 
 export default function IntegracoesPage() {
@@ -41,6 +51,8 @@ export default function IntegracoesPage() {
   const [integracoes, setIntegracoes] = useState<Integracao[]>([])
   const [loading, setLoading] = useState(true)
   const [copiedToken, setCopiedToken] = useState<string | null>(null)
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false)
+  const [integracaoParaExcluir, setIntegracaoParaExcluir] = useState<number | null>(null)
 
   useEffect(() => {
     carregarDados()
@@ -73,7 +85,7 @@ export default function IntegracoesPage() {
     }
   }
 
-  const ativarIntegracao = async (canalId: number) => {
+  const ativarIntegracao = async (canalId: number, canal: Canal) => {
     try {
       const res = await fetch('/api/usuarios/integracoes', {
         method: 'POST',
@@ -82,8 +94,22 @@ export default function IntegracoesPage() {
       })
 
       if (res.ok) {
-        toast({ title: 'Integração ativada com sucesso!' })
-        carregarDados()
+        const data = await res.json()
+        
+        console.log('📝 Resposta da criação:', data)
+        console.log('📝 Canal slug:', canal.slug)
+        console.log('📝 Integração ID:', data.integracao?.id)
+        
+        // Se for Bling, redirecionar para OAuth
+        if (canal.slug === 'erp-bling') {
+          console.log('🔄 Redirecionando para OAuth do Bling...')
+          console.log('🔗 URL OAuth:', `/api/auth/bling/authorize?integracaoId=${data.integracao.id}`)
+          toast({ title: 'Redirecionando para autorização do Bling...' })
+          window.location.href = `/api/auth/bling/authorize?integracaoId=${data.integracao.id}`
+        } else {
+          toast({ title: 'Integração ativada com sucesso!' })
+          carregarDados()
+        }
       } else {
         const error = await res.json()
         toast({
@@ -99,7 +125,7 @@ export default function IntegracoesPage() {
       })
     }
   }
-
+  
   const toggleIntegracao = async (integracaoId: number, ativo: boolean) => {
     try {
       const res = await fetch(`/api/usuarios/integracoes/${integracaoId}`, {
@@ -151,7 +177,31 @@ export default function IntegracoesPage() {
   )
 
   const getIntegracao = (canalId: number) => {
-    return integracoes.find((i) => i.canalId === canalId)
+    return integracoes.find((i) => i.canal.id === canalId)
+  }
+
+  const getIntegracoesPorCanal = (canalId: number) => {
+    return integracoes.filter((i) => i.canal.id === canalId)
+  }
+
+  const iniciarExclusao = (id: number) => {
+    setIntegracaoParaExcluir(id)
+    setConfirmDialogOpen(true)
+  }
+
+  const confirmarExclusao = async () => {
+    if (!integracaoParaExcluir) return
+
+    try {
+      await fetch(`/api/usuarios/integracoes/${integracaoParaExcluir}`, { method: 'DELETE' })
+      toast({ title: 'Integração removida!' })
+      carregarDados()
+    } catch (error) {
+      toast({ title: 'Erro ao remover', variant: 'destructive' })
+    } finally {
+      setConfirmDialogOpen(false)
+      setIntegracaoParaExcluir(null)
+    }
   }
 
   if (loading) {
@@ -184,17 +234,18 @@ export default function IntegracoesPage() {
         <TabsContent value="marketplaces" className="mt-6">
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {canaisMarketplace.map((canal) => {
-              const integracao = getIntegracao(canal.id)
+              const integracoesCanal = getIntegracoesPorCanal(canal.id)
               return (
-                <IntegracaoCard
+                <MultiIntegracaoCard
                   key={canal.id}
                   canal={canal}
-                  integracao={integracao}
-                  onAtivar={() => ativarIntegracao(canal.id)}
-                  onToggle={(ativo) => toggleIntegracao(integracao!.id, ativo)}
-                  onCopyEndpoint={() => copiarEndpoint(integracao!)}
-                  onCopyToken={() => copiarToken(integracao!.token)}
+                  integracoes={integracoesCanal}
+                  onAtivar={() => ativarIntegracao(canal.id, canal)}
+                  onToggle={(id, ativo) => toggleIntegracao(id, ativo)}
+                  onDeletar={iniciarExclusao}
                   copiedToken={copiedToken}
+                  onCopyEndpoint={copiarEndpoint}
+                  onCopyToken={copiarToken}
                 />
               )
             })}
@@ -204,63 +255,89 @@ export default function IntegracoesPage() {
         <TabsContent value="erp" className="mt-6">
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {canaisERP.map((canal) => {
-              const integracao = getIntegracao(canal.id)
+              const integracoesCanal = getIntegracoesPorCanal(canal.id)
+              
+              // Tratamento especial para Bling (OAuth)
+              if (canal.slug === 'erp-bling') {
+                return (
+                  <MultiIntegracaoCard
+                    key={canal.id}
+                    canal={canal}
+                    integracoes={integracoesCanal}
+                    onAtivar={() => {
+                      window.location.href = '/api/auth/bling/authorize'
+                    }}
+                    onReconectar={(id: number) => {
+                      window.location.href = `/api/auth/bling/authorize?integracaoId=${id}`
+                    }}
+                    onToggle={(id, ativo) => toggleIntegracao(id, ativo)}
+                    onDeletar={iniciarExclusao}
+                    copiedToken={copiedToken}
+                    onCopyEndpoint={copiarEndpoint}
+                    onCopyToken={copiarToken}
+                    isOAuth={true}
+                  />
+                )
+              }
+              
+              // Outros canais ERP (webhook padrão)
               return (
-                <IntegracaoCard
+                <MultiIntegracaoCard
                   key={canal.id}
                   canal={canal}
-                  integracao={integracao}
-                  onAtivar={() => ativarIntegracao(canal.id)}
-                  onToggle={(ativo) => toggleIntegracao(integracao!.id, ativo)}
-                  onCopyEndpoint={() => copiarEndpoint(integracao!)}
-                  onCopyToken={() => copiarToken(integracao!.token)}
+                  integracoes={integracoesCanal}
+                  onAtivar={() => ativarIntegracao(canal.id, canal)}
+                  onToggle={(id, ativo) => toggleIntegracao(id, ativo)}
+                  onDeletar={iniciarExclusao}
                   copiedToken={copiedToken}
+                  onCopyEndpoint={copiarEndpoint}
+                  onCopyToken={copiarToken}
                 />
               )
             })}
           </div>
         </TabsContent>
       </Tabs>
+
+      <ConfirmDialog
+        open={confirmDialogOpen}
+        onOpenChange={setConfirmDialogOpen}
+        onConfirm={confirmarExclusao}
+        title="Excluir integração"
+        description="Tem certeza que deseja excluir esta integração? Esta ação não pode ser desfeita."
+      />
     </div>
   )
 }
 
-interface IntegracaoCardProps {
+// Componente genérico para múltiplas contas por canal
+interface MultiIntegracaoCardProps {
   canal: Canal
-  integracao?: Integracao
+  integracoes: Integracao[]
   onAtivar: () => void
-  onToggle: (ativo: boolean) => void
-  onCopyEndpoint: () => void
-  onCopyToken: () => void
+  onReconectar?: (id: number) => void
+  onToggle: (id: number, ativo: boolean) => void
+  onDeletar: (id: number) => void
   copiedToken: string | null
+  onCopyEndpoint: (integracao: Integracao) => void
+  onCopyToken: (token: string) => void
+  isOAuth?: boolean
 }
 
-function IntegracaoCard({
+function MultiIntegracaoCard({
   canal,
-  integracao,
+  integracoes,
   onAtivar,
+  onReconectar,
   onToggle,
+  onDeletar,
+  copiedToken,
   onCopyEndpoint,
   onCopyToken,
-  copiedToken,
-}: IntegracaoCardProps) {
-  const endpointCompleto = integracao
-    ? `${window.location.origin}${canal.endpointPattern.replace('{token}', integracao.token)}`
-    : canal.endpointPattern
-
-  const formatarData = (data: string | null) => {
-    if (!data) return 'Nunca'
-    const diff = Date.now() - new Date(data).getTime()
-    const minutos = Math.floor(diff / 60000)
-    if (minutos < 1) return 'Agora'
-    if (minutos < 60) return `há ${minutos} min`
-    const horas = Math.floor(minutos / 60)
-    if (horas < 24) return `há ${horas}h`
-    return `há ${Math.floor(horas / 24)} dias`
-  }
-
+  isOAuth = false,
+}: MultiIntegracaoCardProps) {
   return (
-    <Card className={integracao?.ativo ? 'border-primary' : ''}>
+    <Card>
       <CardHeader>
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
@@ -276,49 +353,116 @@ function IntegracaoCard({
             <div>
               <CardTitle className="text-base">{canal.nome}</CardTitle>
               <CardDescription className="text-xs">
-                {canal.tipo === 'MARKETPLACE' ? 'Canal de Venda' : 'Webhook ERP'}
+                {integracoes.length} conta{integracoes.length !== 1 ? 's' : ''} conectada{integracoes.length !== 1 ? 's' : ''}
               </CardDescription>
             </div>
           </div>
-          {integracao && (
-            <Switch
-              checked={integracao.ativo}
-              onCheckedChange={onToggle}
-            />
-          )}
+          <Button size="sm" variant="outline" onClick={onAtivar}>
+            <Plus className="h-3 w-3 mr-1" />
+            Nova Conta
+          </Button>
         </div>
       </CardHeader>
 
       <CardContent>
-        {integracao ? (
-          <div className="space-y-4">
-            <div>
-              <Label className="text-xs text-muted-foreground">Endpoint</Label>
-              <div className="flex items-center gap-2 mt-1">
-                <Input
-                  value={endpointCompleto}
-                  readOnly
-                  className="font-mono text-xs h-9"
-                />
-                <Button
-                  size="icon"
-                  variant="outline"
-                  onClick={onCopyEndpoint}
-                  className="h-9 w-9"
-                >
-                  {copiedToken === integracao.token ? (
-                    <Check className="h-4 w-4 text-green-500" />
-                  ) : (
-                    <Copy className="h-4 w-4" />
-                  )}
-                </Button>
-              </div>
-            </div>
+        {integracoes.length === 0 ? (
+          <div className="text-center py-6">
+            <Package className="h-10 w-10 mx-auto text-muted-foreground mb-2" />
+            <p className="text-sm text-muted-foreground mb-3">
+              Nenhuma conta conectada
+            </p>
+            <Button onClick={onAtivar} size="sm">
+              <Plus className="h-4 w-4 mr-2" />
+              Conectar {canal.nome}
+            </Button>
           </div>
         ) : (
-          <Button onClick={onAtivar} className="w-full">
-            Ativar Integração
-          </Button>
+          <div className="space-y-3">
+            {integracoes.map((integracao) => (
+              <div
+                key={integracao.id}
+                className="rounded-lg border p-3 space-y-3"
+              >
+                {/* Header da conta */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {isOAuth ? (
+                      integracao.accessToken ? (
+                        <Badge variant="default" className="bg-green-500">
+                          <CheckCircle2 className="h-3 w-3 mr-1" />
+                          OAuth OK
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary">
+                          <AlertCircle className="h-3 w-3 mr-1" />
+                          Sem OAuth
+                        </Badge>
+                      )
+                    ) : (
+                      <Badge variant={integracao.ativo ? "default" : "secondary"}>
+                        {integracao.ativo ? 'Ativa' : 'Inativa'}
+                      </Badge>
+                    )}
+                    <span className="text-xs text-muted-foreground">
+                      #{integracao.id}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {isOAuth && !integracao.accessToken && onReconectar && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => onReconectar(integracao.id)}
+                        className="h-7 px-2"
+                      >
+                        <RefreshCw className="h-3 w-3" />
+                      </Button>
+                    )}
+                    {!isOAuth && (
+                      <Switch
+                        checked={integracao.ativo}
+                        onCheckedChange={(ativo) => onToggle(integracao.id, ativo)}
+                      />
+                    )}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => onDeletar(integracao.id)}
+                      className="h-7 px-2 text-destructive hover:text-destructive"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Endpoint */}
+                {integracao.token && (
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Endpoint Estoque</Label>
+                    <div className="flex items-center gap-2 mt-1">
+                      <Input
+                        value={`${window.location.origin}${canal.endpointPattern.replace('{token}', integracao.token)}`}
+                        readOnly
+                        className="font-mono text-xs h-8"
+                      />
+                      <Button
+                        size="icon"
+                        variant="outline"
+                        onClick={() => onCopyEndpoint(integracao)}
+                        className="h-8 w-8"
+                      >
+                        {copiedToken === integracao.token ? (
+                          <Check className="h-3 w-3 text-green-500" />
+                        ) : (
+                          <Copy className="h-3 w-3" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         )}
       </CardContent>
     </Card>

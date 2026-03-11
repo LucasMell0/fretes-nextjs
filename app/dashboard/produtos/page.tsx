@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/use-toast'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -22,14 +23,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Plus, Pencil, Trash2, Loader2, Package, Box, ChevronDown, ChevronRight, Search, X } from 'lucide-react'
+import { Plus, Pencil, Trash2, Loader2, Package, Box, ChevronDown, ChevronRight, Search, X, Download, CheckCircle2, XCircle } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupInput,
-  InputGroupButton,
-} from '@/components/ui/input-group'
+import { usePagination } from '@/hooks/use-pagination'
+import { PaginationWrapper } from '@/components/ui/pagination-wrapper'
 import {
   Pagination,
   PaginationContent,
@@ -41,6 +38,13 @@ import {
 } from '@/components/ui/pagination'
 import { Switch } from '@/components/ui/switch'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 interface Atributo {
   id: number
@@ -58,8 +62,16 @@ interface Produto {
   crossDocking: number
   estoque: number
   ativo: boolean
+  usarDadosPaiParaVariacoes?: boolean
   atributos: Atributo[]
   variacoes?: Produto[]
+  produtoPai?: {
+    id: number
+    nome: string
+    peso: number
+    cubagem: number
+    usarDadosPaiParaVariacoes: boolean
+  }
   _count?: {
     cubagens: number
     variacoes: number
@@ -76,8 +88,19 @@ export default function ProdutosPage() {
   const [paginaAtual, setPaginaAtual] = useState(1)
   const [itensPorPagina] = useState(10)
   const [loading, setLoading] = useState(true)
-  const [dialogOpen, setDialogOpen] = useState(false)
-  const [editando, setEditando] = useState<Produto | null>(null)
+  const [dialogAberto, setDialogAberto] = useState(false)
+  const [modoEdicao, setModoEdicao] = useState(false)
+  const [dialogImportacao, setDialogImportacao] = useState(false)
+  const [importando, setImportando] = useState(false)
+  const [resultadoImport, setResultadoImport] = useState<any>(null)
+  const [produtosBling, setProdutosBling] = useState<any[]>([])
+  const [carregandoProdutos, setCarregandoProdutos] = useState(false)
+  const [produtosSelecionados, setProdutosSelecionados] = useState<Set<number>>(new Set()) // Para import Bling
+  const [produtosTabelaSelecionados, setProdutosTabelaSelecionados] = useState<Set<number>>(new Set()) // Para tabela principal
+  const [integracoesBling, setIntegracoesBling] = useState<any[]>([])
+  const [integracaoSelecionada, setIntegracaoSelecionada] = useState<string>('')
+  const [carregandoIntegracoes, setCarregandoIntegracoes] = useState(false)
+  const [buscaBling, setBuscaBling] = useState('')
   const [formData, setFormData] = useState({
     nome: '',
     sku: '',
@@ -86,9 +109,13 @@ export default function ProdutosPage() {
     crossDocking: 0,
     estoque: 0,
     ativo: true,
+    usarDadosPaiParaVariacoes: false,
   })
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false)
   const [produtoParaExcluir, setProdutoParaExcluir] = useState<number | null>(null)
+  const [confirmDeleteMultipleOpen, setConfirmDeleteMultipleOpen] = useState(false)
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [editando, setEditando] = useState<Produto | null>(null)
 
   const carregarProdutos = async () => {
     try {
@@ -106,6 +133,19 @@ export default function ProdutosPage() {
       setLoading(false)
     }
   }
+
+  // Filtrar produtos Bling por busca
+  const produtosBlingFiltrados = useMemo(() => {
+    if (!buscaBling.trim()) return produtosBling
+    
+    const buscaLower = buscaBling.toLowerCase()
+    return produtosBling.filter(p => 
+      p.nome.toLowerCase().includes(buscaLower) ||
+      p.codigo?.toLowerCase().includes(buscaLower)
+    )
+  }, [produtosBling, buscaBling])
+
+  const paginationBling = usePagination(produtosBlingFiltrados, 10)
 
   const aplicarFiltros = (todosProdutos: Produto[], busca: string) => {
     // Filtrar apenas produtos que não são variações (produtoPaiId === null)
@@ -135,11 +175,27 @@ export default function ProdutosPage() {
 
   const limparBusca = () => {
     setBuscaTexto('')
-    aplicarFiltros(produtos, '')
-    setPaginaAtual(1)
   }
 
-  // Paginação
+  const toggleProdutoTabela = (id: number) => {
+    const novoSet = new Set(produtosTabelaSelecionados)
+    if (novoSet.has(id)) {
+      novoSet.delete(id)
+    } else {
+      novoSet.add(id)
+    }
+    setProdutosTabelaSelecionados(novoSet)
+  }
+
+  const selecionarTodosTabela = () => {
+    const produtosVisiveis = produtosExibir.slice((paginaAtual - 1) * itensPorPagina, paginaAtual * itensPorPagina)
+    if (produtosTabelaSelecionados.size === produtosVisiveis.length && produtosVisiveis.length > 0) {
+      setProdutosTabelaSelecionados(new Set())
+    } else {
+      setProdutosTabelaSelecionados(new Set(produtosVisiveis.map(p => p.id)))
+    }
+  }
+
   const totalPaginas = Math.ceil(produtosExibir.length / itensPorPagina)
   const indiceInicio = (paginaAtual - 1) * itensPorPagina
   const indiceFim = indiceInicio + itensPorPagina
@@ -196,9 +252,31 @@ export default function ProdutosPage() {
     return atributos.map(a => `${a.atributo}: ${a.valor}`).join(' | ')
   }
 
+  const obterDadosExibicao = (produto: Produto, produtoPai?: Produto) => {
+    const usarDadosPai = produtoPai && produtoPai.usarDadosPaiParaVariacoes
+    return {
+      peso: usarDadosPai ? produtoPai.peso : produto.peso,
+      cubagem: usarDadosPai ? produtoPai.cubagem : produto.cubagem,
+      usandoDadosPai: usarDadosPai || false
+    }
+  }
+
   useEffect(() => {
     carregarProdutos()
   }, [])
+
+  useEffect(() => {
+    if (dialogImportacao) {
+      buscarIntegracoesBling()
+    } else {
+      // Limpar ao fechar o modal
+      setProdutosBling([])
+      setProdutosSelecionados(new Set())
+      setResultadoImport(null)
+      setIntegracaoSelecionada('')
+      setBuscaBling('')
+    }
+  }, [dialogImportacao])
 
   const abrirDialogNovo = () => {
     setEditando(null)
@@ -210,6 +288,7 @@ export default function ProdutosPage() {
       crossDocking: 0,
       estoque: 0,
       ativo: true,
+      usarDadosPaiParaVariacoes: false,
     })
     setDialogOpen(true)
   }
@@ -224,6 +303,7 @@ export default function ProdutosPage() {
       crossDocking: produto.crossDocking,
       estoque: produto.estoque,
       ativo: produto.ativo,
+      usarDadosPaiParaVariacoes: produto.usarDadosPaiParaVariacoes || false,
     })
     setDialogOpen(true)
   }
@@ -265,6 +345,32 @@ export default function ProdutosPage() {
     setConfirmDialogOpen(true)
   }
 
+  const deletarSelecionados = async () => {
+    if (produtosTabelaSelecionados.size === 0) return
+
+    try {
+      const deletePromises = Array.from(produtosTabelaSelecionados).map(id =>
+        fetch(`/api/produtos/${id}`, { method: 'DELETE' })
+      )
+
+      await Promise.all(deletePromises)
+
+      toast({
+        title: 'Produtos deletados!',
+        description: `${produtosTabelaSelecionados.size} produto(s) deletado(s) com sucesso`,
+      })
+
+      setProdutosTabelaSelecionados(new Set())
+      setConfirmDeleteMultipleOpen(false)
+      carregarProdutos()
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao deletar produtos',
+      })
+    }
+  }
+
   const confirmarExclusao = async () => {
     if (!produtoParaExcluir) return
 
@@ -293,6 +399,160 @@ export default function ProdutosPage() {
     }
   }
 
+  const buscarIntegracoesBling = async () => {
+    try {
+      setCarregandoIntegracoes(true)
+      const integracoesRes = await fetch('/api/usuarios/integracoes')
+      const integracoes = await integracoesRes.json()
+      const blingIntegracoes = integracoes.filter((i: any) => i.canal.slug === 'erp-bling' && i.accessToken)
+      
+      setIntegracoesBling(blingIntegracoes)
+      
+      // Se houver apenas 1 integração, selecionar automaticamente
+      if (blingIntegracoes.length === 1) {
+        setIntegracaoSelecionada(blingIntegracoes[0].id.toString())
+      }
+      
+      if (blingIntegracoes.length === 0) {
+        toast({
+          title: 'Nenhuma conta Bling conectada',
+          description: 'Conecte sua conta do Bling em Integrações para importar produtos.',
+          variant: 'destructive',
+        })
+      }
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao buscar integrações',
+      })
+    } finally {
+      setCarregandoIntegracoes(false)
+    }
+  }
+
+  const listarProdutosBling = async () => {
+    if (!integracaoSelecionada) {
+      toast({
+        title: 'Selecione uma conta',
+        description: 'Selecione a conta Bling da qual deseja importar produtos.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    try {
+      setCarregandoProdutos(true)
+      setProdutosBling([])
+      setProdutosSelecionados(new Set())
+
+      const params = new URLSearchParams({
+        integracaoId: integracaoSelecionada
+      })
+
+      const response = await fetch(`/api/bling/listar-produtos?${params}`)
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.message || 'Erro ao listar produtos')
+      }
+
+      const data = await response.json()
+      setProdutosBling(data.produtos || [])
+
+      toast({
+        title: 'Produtos carregados!',
+        description: `${data.produtos.length} produtos encontrados no Bling`,
+      })
+    } catch (error) {
+      console.error('Erro ao listar produtos:', error)
+      toast({
+        title: 'Erro ao listar produtos',
+        description: error instanceof Error ? error.message : 'Erro desconhecido',
+        variant: 'destructive',
+      })
+    } finally {
+      setCarregandoProdutos(false)
+    }
+  }
+
+  const toggleProdutoSelecionado = (id: number) => {
+    const novoSet = new Set(produtosSelecionados)
+    if (novoSet.has(id)) {
+      novoSet.delete(id)
+    } else {
+      novoSet.add(id)
+    }
+    setProdutosSelecionados(novoSet)
+  }
+
+  const selecionarTodos = () => {
+    if (produtosSelecionados.size === produtosBlingFiltrados.length) {
+      setProdutosSelecionados(new Set())
+    } else {
+      setProdutosSelecionados(new Set(produtosBlingFiltrados.map(p => p.id)))
+    }
+  }
+
+  const importarProdutosSelecionados = async () => {
+    if (produtosSelecionados.size === 0) {
+      toast({
+        title: 'Nenhum produto selecionado',
+        description: 'Selecione pelo menos um produto para importar',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    if (!integracaoSelecionada) {
+      toast({
+        title: 'Selecione uma conta',
+        description: 'Selecione a conta Bling para importar os produtos.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    try {
+      setImportando(true)
+      setResultadoImport(null)
+
+      const response = await fetch('/api/bling/importar-produtos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          integracaoId: integracaoSelecionada,
+          produtoIds: Array.from(produtosSelecionados),
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.message || 'Erro ao importar produtos')
+      }
+
+      const data = await response.json()
+      setResultadoImport(data)
+
+      toast({
+        title: 'Importação concluída!',
+        description: `${data.importados} importados, ${data.atualizados} atualizados`,
+      })
+
+      // Limpar seleção e recarregar
+      setProdutosSelecionados(new Set())
+      carregarProdutos()
+    } catch (error) {
+      console.error('Erro na importação:', error)
+      toast({
+        title: 'Erro na importação',
+        description: error instanceof Error ? error.message : 'Erro desconhecido',
+        variant: 'destructive',
+      })
+    } finally {
+      setImportando(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -308,35 +568,49 @@ export default function ProdutosPage() {
           <h2 className="text-3xl font-bold">Produtos</h2>
           <p className="text-muted-foreground">Gerencie os produtos cadastrados</p>
         </div>
-        <Button onClick={abrirDialogNovo}>
-          <Plus className="mr-2 h-4 w-4" />
-          Novo Produto
-        </Button>
+        <div className="flex gap-2">
+          {produtosTabelaSelecionados.size > 0 && (
+            <Button 
+              variant="destructive" 
+              onClick={() => setConfirmDeleteMultipleOpen(true)}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Deletar Selecionados ({produtosTabelaSelecionados.size})
+            </Button>
+          )}
+          <Button variant="outline" onClick={() => setDialogImportacao(true)}>
+            <Download className="mr-2 h-4 w-4" />
+            Importar do Bling
+          </Button>
+          <Button onClick={abrirDialogNovo}>
+            <Plus className="mr-2 h-4 w-4" />
+            Novo Produto
+          </Button>
+        </div>
       </div>
 
       {/* Campo de Busca */}
       <div className="mb-6">
-        <InputGroup>
-          <InputGroupInput
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
             placeholder="Buscar por nome ou SKU (inclui variações)..."
             value={buscaTexto}
             onChange={(e) => handleBuscaChange(e.target.value)}
-            className="ps-10"
+            className="pl-10 pr-10"
           />
-          <InputGroupAddon align="inline-start">
-            <Search className="h-4 w-4" />
-          </InputGroupAddon>
           {buscaTexto && (
-            <InputGroupAddon align="inline-end">
-              <InputGroupButton
-                onClick={limparBusca}
-                aria-label="Limpar busca"
-              >
-                <X className="h-4 w-4" />
-              </InputGroupButton>
-            </InputGroupAddon>
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={limparBusca}
+              className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
+              aria-label="Limpar busca"
+            >
+              <X className="h-4 w-4" />
+            </Button>
           )}
-        </InputGroup>
+        </div>
         {buscaTexto && (
           <p className="text-sm text-muted-foreground mt-2">
             Exibindo <strong>{produtosExibir.length}</strong> de <strong>{produtos.filter(p => p.produtoPaiId === null).length}</strong> produtos
@@ -348,6 +622,12 @@ export default function ProdutosPage() {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-12">
+                <Checkbox
+                  checked={produtosTabelaSelecionados.size === produtosPaginados.length && produtosPaginados.length > 0}
+                  onCheckedChange={selecionarTodosTabela}
+                />
+              </TableHead>
               <TableHead>SKU</TableHead>
               <TableHead>Nome</TableHead>
               <TableHead>Peso</TableHead>
@@ -362,6 +642,12 @@ export default function ProdutosPage() {
               <>
                 {/* Linha do produto pai */}
                 <TableRow key={p.id} className={p._count?.variacoes ? 'font-medium' : ''}>
+                  <TableCell>
+                    <Checkbox
+                      checked={produtosTabelaSelecionados.has(p.id)}
+                      onCheckedChange={() => toggleProdutoTabela(p.id)}
+                    />
+                  </TableCell>
                   <TableCell className="font-mono">
                     <div className="flex items-center gap-2">
                       {p._count?.variacoes ? (
@@ -430,8 +716,11 @@ export default function ProdutosPage() {
                 </TableRow>
 
                 {/* Linhas das variações (se expandido) */}
-                {expandidos.has(p.id) && p.variacoes?.map((variacao) => (
+                {expandidos.has(p.id) && p.variacoes?.map((variacao) => {
+                  const dadosExibicao = obterDadosExibicao(variacao, p)
+                  return (
                   <TableRow key={variacao.id} className="bg-muted/50">
+                    <TableCell></TableCell>
                     <TableCell className="font-mono text-sm">
                       <div className="pl-8">{variacao.sku}</div>
                     </TableCell>
@@ -445,8 +734,26 @@ export default function ProdutosPage() {
                         )}
                       </div>
                     </TableCell>
-                    <TableCell className="text-sm">{Number(variacao.peso).toFixed(2)} kg</TableCell>
-                    <TableCell className="text-sm">{Number(variacao.cubagem).toFixed(4)}</TableCell>
+                    <TableCell className="text-sm">
+                      <div className="flex items-center gap-1">
+                        <span>{Number(dadosExibicao.peso).toFixed(2)} kg</span>
+                        {dadosExibicao.usandoDadosPai && (
+                          <Badge variant="outline" className="text-xs px-1 py-0 h-4">
+                            Pai
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      <div className="flex items-center gap-1">
+                        <span>{Number(dadosExibicao.cubagem).toFixed(4)}</span>
+                        {dadosExibicao.usandoDadosPai && (
+                          <Badge variant="outline" className="text-xs px-1 py-0 h-4">
+                            Pai
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell className="text-sm">{variacao.estoque}</TableCell>
                     <TableCell>
                       <Badge variant={variacao.ativo ? 'default' : 'secondary'} className="text-xs">
@@ -478,7 +785,8 @@ export default function ProdutosPage() {
                       </Button>
                     </TableCell>
                   </TableRow>
-                ))}
+                  )
+                })}
               </>
             ))}
           </TableBody>
@@ -618,6 +926,25 @@ export default function ProdutosPage() {
               />
               <Label htmlFor="ativo" className="cursor-pointer">Ativo</Label>
             </div>
+            {!editando?.produtoPaiId && (
+              <div className="col-span-2">
+                <div className="flex items-center space-x-2 p-4 border rounded-lg bg-muted/50">
+                  <Switch
+                    id="usarDadosPai"
+                    checked={formData.usarDadosPaiParaVariacoes}
+                    onCheckedChange={(checked) => setFormData({ ...formData, usarDadosPaiParaVariacoes: checked as boolean })}
+                  />
+                  <div className="flex-1">
+                    <Label htmlFor="usarDadosPai" className="cursor-pointer font-medium">
+                      Usar dados do pai para variações
+                    </Label>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Quando ativo, as variações deste produto usarão automaticamente o peso e cubagem do produto pai. O estoque continua individual.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>
@@ -634,7 +961,226 @@ export default function ProdutosPage() {
         onConfirm={confirmarExclusao}
         title="Excluir produto"
         description="Tem certeza que deseja excluir este produto? Esta ação não pode ser desfeita."
+        confirmText="Excluir"
+        cancelText="Cancelar"
       />
+
+      <ConfirmDialog
+        open={confirmDeleteMultipleOpen}
+        onOpenChange={setConfirmDeleteMultipleOpen}
+        onConfirm={deletarSelecionados}
+        title={`Excluir ${produtosTabelaSelecionados.size} produto(s)`}
+        description={`Tem certeza que deseja excluir ${produtosTabelaSelecionados.size} produto(s) selecionado(s)? Esta ação não pode ser desfeita.`}
+        confirmText="Excluir Todos"
+        cancelText="Cancelar"
+      />
+
+      {/* Dialog de Importação do Bling */}
+      <Dialog open={dialogImportacao} onOpenChange={setDialogImportacao}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Importar Produtos do Bling</DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="p-4 bg-muted/50 rounded-lg border">
+              <p className="text-sm text-muted-foreground">
+                <strong>Configuração automática:</strong> Buscando apenas produtos <strong>ATIVOS</strong> e <strong>PRODUTOS PAI</strong> (sem variações individuais).
+              </p>
+              <p className="text-xs text-muted-foreground mt-2">
+                O sistema irá buscar todas as páginas automaticamente até encontrar todos os produtos.
+              </p>
+            </div>
+
+            {/* Selecionar Conta Bling */}
+            <div>
+              <Label htmlFor="conta-bling">Conta Bling</Label>
+              {carregandoIntegracoes ? (
+                <div className="flex items-center gap-2 p-3 border rounded-md mt-1">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="text-sm text-muted-foreground">Carregando contas...</span>
+                </div>
+              ) : integracoesBling.length === 0 ? (
+                <div className="p-3 border rounded-md mt-1 bg-destructive/10 border-destructive/20">
+                  <p className="text-sm text-destructive">
+                    Nenhuma conta Bling conectada. Configure em <strong>Integrações</strong>.
+                  </p>
+                </div>
+              ) : (
+                <Select
+                  value={integracaoSelecionada}
+                  onValueChange={setIntegracaoSelecionada}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Selecione a conta Bling" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {integracoesBling.map((integracao) => (
+                      <SelectItem key={integracao.id} value={integracao.id.toString()}>
+                        {integracao.nome || `Conta Bling ${integracao.id}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+
+            {/* Botão Buscar */}
+            <Button 
+              onClick={listarProdutosBling} 
+              disabled={carregandoProdutos || !integracaoSelecionada || integracoesBling.length === 0}
+              className="w-full"
+            >
+              {carregandoProdutos && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {carregandoProdutos ? 'Buscando...' : 'Buscar Produtos do Bling'}
+            </Button>
+
+            {/* Campo de Busca */}
+            {produtosBling.length > 0 && (
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar por nome ou SKU..."
+                  value={buscaBling}
+                  onChange={(e) => setBuscaBling(e.target.value)}
+                  className="pl-10 pr-10"
+                />
+                {buscaBling && (
+                  <button
+                    onClick={() => setBuscaBling('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Lista de Produtos com Checkbox */}
+            {produtosBling.length > 0 && (
+              <>
+                <div className="border rounded-lg">
+                  <div className="p-3 border-b bg-muted/50 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="select-all"
+                        checked={produtosSelecionados.size === produtosBlingFiltrados.length && produtosBlingFiltrados.length > 0}
+                        onCheckedChange={selecionarTodos}
+                      />
+                      <Label htmlFor="select-all" className="cursor-pointer">
+                        Selecionar Todos ({produtosSelecionados.size} de {produtosBlingFiltrados.length})
+                      </Label>
+                    </div>
+                    <Badge variant="outline">{produtosBling.length} produtos encontrados</Badge>
+                  </div>
+                  {produtosBlingFiltrados.length === 0 ? (
+                    <div className="p-8 text-center text-muted-foreground">
+                      <Package className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                      <p>Nenhum produto encontrado</p>
+                    </div>
+                  ) : (
+                    <div className="max-h-96 overflow-y-auto">
+                      {paginationBling.paginatedItems.map((produto: any) => (
+                        <div
+                          key={produto.id}
+                          className="p-3 border-b last:border-b-0 hover:bg-muted/50 flex items-center gap-3"
+                        >
+                          <Checkbox
+                            id={`produto-${produto.id}`}
+                            checked={produtosSelecionados.has(produto.id)}
+                            onCheckedChange={() => toggleProdutoSelecionado(produto.id)}
+                          />
+                          <div className="flex-1 cursor-pointer" onClick={() => toggleProdutoSelecionado(produto.id)}>
+                            <div className="font-medium">{produto.nome}</div>
+                            <div className="text-sm text-muted-foreground flex items-center gap-4">
+                              <span>SKU: <span className="font-mono">{produto.codigo}</span></span>
+                              <span>Estoque: {Math.floor(produto.estoque?.saldoVirtualTotal || 0)}</span>
+                              {produto.formato === 'V' && (
+                                <Badge variant="secondary" className="text-xs">Com Variações</Badge>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Paginação */}
+                <PaginationWrapper
+                  currentPage={paginationBling.currentPage}
+                  totalPages={paginationBling.totalPages}
+                  onPageChange={paginationBling.changePage}
+                  generatePageNumbers={paginationBling.generatePageNumbers}
+                  startIndex={paginationBling.startIndex}
+                  endIndex={paginationBling.endIndex}
+                  totalItems={produtosBlingFiltrados.length}
+                  itemName="produtos"
+                />
+              </>
+            )}
+
+            {/* Resultado da Importação */}
+            {resultadoImport && (
+              <div className="rounded-lg border p-4 bg-muted/50">
+                <h4 className="font-semibold mb-3">Resultado da Importação</h4>
+                <div className="grid grid-cols-3 gap-4 mb-3">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    <span className="text-sm">
+                      <strong>{resultadoImport.importados}</strong> importados
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Download className="h-4 w-4 text-blue-500" />
+                    <span className="text-sm">
+                      <strong>{resultadoImport.atualizados}</strong> atualizados
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <XCircle className="h-4 w-4 text-red-500" />
+                    <span className="text-sm">
+                      <strong>{resultadoImport.erros}</strong> erros
+                    </span>
+                  </div>
+                </div>
+                
+                {resultadoImport.detalhes && resultadoImport.detalhes.length > 0 && (
+                  <div className="max-h-48 overflow-y-auto text-xs space-y-1">
+                    {resultadoImport.detalhes.slice(0, 10).map((detalhe: any, idx: number) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        {detalhe.status === 'importado' && <CheckCircle2 className="h-3 w-3 text-green-500" />}
+                        {detalhe.status === 'atualizado' && <Download className="h-3 w-3 text-blue-500" />}
+                        {detalhe.status === 'erro' && <XCircle className="h-3 w-3 text-red-500" />}
+                        <span className="font-mono">{detalhe.sku}</span>
+                        <span className="text-muted-foreground">{detalhe.mensagem}</span>
+                      </div>
+                    ))}
+                    {resultadoImport.detalhes.length > 10 && (
+                      <p className="text-muted-foreground text-center pt-2">
+                        E mais {resultadoImport.detalhes.length - 10} produtos...
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialogImportacao(false)}>
+              Fechar
+            </Button>
+            <Button 
+              onClick={importarProdutosSelecionados} 
+              disabled={importando || produtosSelecionados.size === 0}
+            >
+              {importando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {importando ? 'Importando...' : `Importar Selecionados (${produtosSelecionados.size})`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

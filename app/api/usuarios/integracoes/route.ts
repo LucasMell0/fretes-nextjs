@@ -1,27 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { logger } from '@/lib/logger'
+import { z } from 'zod'
+import { withAuth } from '@/lib/middleware/auth'
 import crypto from 'crypto'
 
 export const revalidate = 0
 
 // Listar integrações do usuário
-export async function GET() {
+export const GET = withAuth(async (req, { userId }) => {
   try {
-    const session = await getServerSession(authOptions)
-    
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        { erro: 'Não autenticado' },
-        { status: 401 }
-      )
-    }
-
     const integracoes = await prisma.usuarioIntegracaoCanal.findMany({
-      where: {
-        usuarioId: parseInt(session.user.id),
-      },
+      where: { usuarioId: userId },
       include: {
         canal: {
           select: {
@@ -47,27 +37,18 @@ export async function GET() {
 
     return NextResponse.json(integracoes)
   } catch (error) {
-    console.error('Erro ao buscar integrações:', error)
+    logger.error('Erro ao buscar integrações:', error)
     return NextResponse.json(
       { erro: 'Erro ao buscar integrações' },
       { status: 500 }
     )
   }
-}
+})
 
 // Criar nova integração (ativar canal)
-export async function POST(request: NextRequest) {
+export const POST = withAuth(async (req, { userId }) => {
   try {
-    const session = await getServerSession(authOptions)
-    
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        { erro: 'Não autenticado' },
-        { status: 401 }
-      )
-    }
-
-    const body = await request.json()
+    const body = await req.json()
     const { canalId, config } = body
 
     if (!canalId) {
@@ -89,30 +70,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verificar se já existe integração
-    const integracaoExistente = await prisma.usuarioIntegracaoCanal.findUnique({
-      where: {
-        usuarioId_canalId: {
-          usuarioId: parseInt(session.user.id),
-          canalId: canalId,
-        },
-      },
-    })
-
-    if (integracaoExistente) {
-      return NextResponse.json(
-        { erro: 'Integração já existe para este canal' },
-        { status: 409 }
-      )
-    }
-
     // Gerar token único
     const token = crypto.randomBytes(32).toString('hex')
 
     // Criar integração
     const integracao = await prisma.usuarioIntegracaoCanal.create({
       data: {
-        usuarioId: parseInt(session.user.id),
+        usuarioId: userId,
         canalId: canalId,
         token: token,
         config: config || {},
@@ -134,12 +98,12 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    return NextResponse.json(integracao, { status: 201 })
+    return NextResponse.json({ integracao }, { status: 201 })
   } catch (error) {
-    console.error('Erro ao criar integração:', error)
+    logger.error('Erro ao criar integração:', error)
     return NextResponse.json(
       { erro: 'Erro ao criar integração' },
       { status: 500 }
     )
   }
-}
+})

@@ -1,18 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { logger } from '@/lib/logger'
 import { z } from 'zod'
+import { withAuthTyped } from '@/lib/middleware/auth'
+import { parseRouteId } from '@/lib/utils/parse'
+import { verifyOwnership } from '@/lib/utils/ownership'
+import type { TransportadoraRegiaoWithKgAdicional } from '@/lib/types/prisma-helpers'
+
+interface RouteParams {
+  id: string
+}
 
 const kgAdicionalSchema = z.object({
   valorKgAdicional: z.number().min(0),
 })
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export const PUT = withAuthTyped<RouteParams>(async (req, { userId }, params) => {
   try {
-    const regiaoId = parseInt(params.id)
-    const body = await request.json()
+    const regiaoId = parseRouteId(params!.id)
+    const body = await req.json()
 
     const validation = kgAdicionalSchema.safeParse(body)
     if (!validation.success) {
@@ -22,15 +28,18 @@ export async function POST(
       )
     }
 
-    // Verificar se região existe
-    const regiao = await prisma.transportadoraRegiao.findUnique({
-      where: { id: regiaoId },
-      include: { kgAdicional: true },
-    })
+    const regiao = await verifyOwnership<TransportadoraRegiaoWithKgAdicional>(
+      prisma.transportadoraRegiao,
+      regiaoId,
+      userId,
+      {
+        kgAdicional: true,
+      }
+    )
 
     if (!regiao) {
       return NextResponse.json(
-        { erro: 'Região não encontrada' },
+        { erro: 'Região não encontrada ou sem permissão' },
         { status: 404 }
       )
     }
@@ -55,10 +64,10 @@ export async function POST(
 
     return NextResponse.json(kgAdicional)
   } catch (error) {
-    console.error('Erro ao salvar KG adicional:', error)
+    logger.error('Erro ao salvar KG adicional:', error)
     return NextResponse.json(
       { erro: 'Erro ao salvar KG adicional' },
       { status: 500 }
     )
   }
-}
+})

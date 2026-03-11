@@ -1,25 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { logger } from '@/lib/logger'
 import { z } from 'zod'
+import { withAuth } from '@/lib/middleware/auth'
+import { verifyTransportadoraOwnership } from '@/lib/validators/relationship.validator'
 
 // OTIMIZADO: Cache de 30 segundos
 export const revalidate = 30
 
 const regiaoSchema = z.object({
+  transportadoraId: z.number().int().positive(),
   nome: z.string().min(3, 'Nome deve ter no mínimo 3 caracteres'),
   cepInicio: z.string().length(8, 'CEP deve ter 8 dígitos'),
   cepFim: z.string().length(8, 'CEP deve ter 8 dígitos'),
-  transportadoraId: z.number().int().positive('Transportadora é obrigatória'),
+  prazoEntrega: z.number().int().min(0, 'Prazo não pode ser negativo'),
   ativo: z.boolean().optional().default(true),
 })
 
-export async function GET() {
+export const GET = withAuth(async (req, { userId }) => {
   try {
     const regioes = await prisma.transportadoraRegiao.findMany({
-      orderBy: [
-        { transportadora: { nome: 'asc' } },
-        { nome: 'asc' },
-      ],
+      where: {
+        usuarioId: userId
+      },
       include: {
         transportadora: {
           select: {
@@ -37,16 +40,17 @@ export async function GET() {
 
     return NextResponse.json(regioes)
   } catch (error) {
+    logger.error('Erro ao buscar regiões:', error)
     return NextResponse.json(
       { erro: 'Erro ao buscar regiões' },
       { status: 500 }
     )
   }
-}
+})
 
-export async function POST(request: NextRequest) {
+export const POST = withAuth(async (req, { userId }) => {
   try {
-    const body = await request.json()
+    const body = await req.json()
     const validation = regiaoSchema.safeParse(body)
 
     if (!validation.success) {
@@ -56,8 +60,24 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Verificar se transportadora pertence ao usuário
+    const transportadoraValida = await verifyTransportadoraOwnership(
+      validation.data.transportadoraId,
+      userId
+    )
+
+    if (!transportadoraValida) {
+      return NextResponse.json(
+        { erro: 'Transportadora não encontrada ou sem permissão' },
+        { status: 404 }
+      )
+    }
+
     const regiao = await prisma.transportadoraRegiao.create({
-      data: validation.data,
+      data: {
+        ...validation.data,
+        usuarioId: userId
+      },
       include: {
         transportadora: true,
       },
@@ -65,9 +85,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(regiao, { status: 201 })
   } catch (error) {
+    logger.error('Erro ao criar região:', error)
     return NextResponse.json(
       { erro: 'Erro ao criar região' },
       { status: 500 }
     )
   }
-}
+})

@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { logger } from '@/lib/logger'
 import { z } from 'zod'
+import { withAuthTyped } from '@/lib/middleware/auth'
+import { parseRouteId } from '@/lib/utils/parse'
+import { verifyOwnership } from '@/lib/utils/ownership'
+import type { ProdutoWithProdutoPaiId } from '@/lib/types/prisma-helpers'
+
+interface RouteParams {
+  id: string
+}
 
 const variacaoTipoSchema = z.object({
   nome: z.string().min(1),
@@ -12,28 +21,29 @@ const gerarVariacoesSchema = z.object({
   tipos: z.array(variacaoTipoSchema).min(1),
 })
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export const GET = withAuthTyped<RouteParams>(async (req, { userId }, params) => {
   try {
-    const produtoPaiId = parseInt(params.id)
+    const produtoPaiId = parseRouteId(params!.id)
 
-    // Verificar se produto pai existe
-    const produtoPai = await prisma.produto.findUnique({
-      where: { id: produtoPaiId },
-    })
+    const produtoPai = await verifyOwnership<ProdutoWithProdutoPaiId>(
+      prisma.produto,
+      produtoPaiId,
+      userId
+    )
 
     if (!produtoPai || produtoPai.produtoPaiId !== null) {
       return NextResponse.json(
-        { erro: 'Produto não encontrado ou não é um produto pai' },
+        { erro: 'Produto não encontrado, sem permissão ou não é um produto pai' },
         { status: 404 }
       )
     }
 
-    // Buscar variações
+    // Buscar variações (filtradas por usuário)
     const variacoes = await prisma.produto.findMany({
-      where: { produtoPaiId: produtoPaiId },
+      where: {
+        produtoPaiId: produtoPaiId,
+        usuarioId: userId
+      },
       include: {
         atributos: true,
       },
@@ -45,20 +55,18 @@ export async function GET(
       variacoes,
     })
   } catch (error) {
+    logger.error('Erro ao buscar variações:', error)
     return NextResponse.json(
       { erro: 'Erro ao buscar variações' },
       { status: 500 }
     )
   }
-}
+})
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export const POST = withAuthTyped<RouteParams>(async (req, { userId }, params) => {
   try {
-    const produtoPaiId = parseInt(params.id)
-    const body = await request.json()
+    const produtoPaiId = parseRouteId(params!.id)
+    const body = await req.json()
     
     const validation = gerarVariacoesSchema.safeParse(body)
     if (!validation.success) {
@@ -70,10 +78,11 @@ export async function POST(
 
     const { skuBase, tipos } = validation.data
 
-    // Buscar produto pai
-    const produtoPai = await prisma.produto.findUnique({
-      where: { id: produtoPaiId },
-    })
+    const produtoPai = await verifyOwnership<ProdutoWithProdutoPaiId>(
+      prisma.produto,
+      produtoPaiId,
+      userId
+    )
 
     if (!produtoPai || produtoPai.produtoPaiId !== null) {
       return NextResponse.json(
@@ -95,50 +104,74 @@ export async function POST(
       combinacoes = novasCombinacoes
     }
 
-    const variacoesCriadas = []
-    const erros = []
-
-    for (const combinacao of combinacoes) {
-      // Gerar SKU e nome
-      const sufixo = combinacao.map(c => c.valor.toUpperCase()).join('-')
-      const skuVariacao = `${skuBase}-${sufixo}`
-      const nomeVariacao = `${produtoPai.nome}-${sufixo}`
-
-      // Verificar se SKU já existe
-      const existente = await prisma.produto.findUnique({
-        where: { sku: skuVariacao },
-      })
-
-      if (existente) {
-        erros.push(`SKU '${skuVariacao}' já existe`)
-        continue
+    // OTIMIZAÇÃO: Gerar todos os SKUs primeiro
+    const variacoesParaCriar = combinacoes.map(combinacao => {
+      const sufixoSKU = combinacao.map(c => c.valor).join('-')
+      const nomeVariacao = `${produtoPai.nome} - ${combinacao.map(c => c.valor).join(' ')}`
+      
+      return {
+        sku: `${skuBase}-${sufixoSKU}`,
+        nome: nomeVariacao,
+        combinacao,
       }
+    })
 
-      // Criar variação
-      const variacao = await prisma.produto.create({
-        data: {
-          produtoPaiId: produtoPaiId,
-          nome: nomeVariacao,
-          sku: skuVariacao,
-          peso: produtoPai.peso,
-          cubagem: produtoPai.cubagem,
-          crossDocking: produtoPai.crossDocking,
-          estoque: 0,
-          ativo: true,
-          atributos: {
-            create: combinacao.map(c => ({
-              atributo: c.tipo,
-              valor: c.valor,
-            })),
+    // OTIMIZAÇÃO: Verificar todos os SKUs de uma vez (1 query ao invés de N)
+    const skusParaVerificar = variacoesParaCriar.map(v => v.sku)
+    const produtosExistentes = await prisma.produto.findMany({
+      where: {
+        sku: { in: skusParaVerificar },
+        usuarioId: userId,
+      },
+      select: { sku: true },
+    })
+
+    // Criar Set de SKUs existentes para lookup O(1)
+    const skusExistentes = new Set(produtosExistentes.map(p => p.sku))
+
+    // Filtrar variações válidas e preparar erros
+    const erros: string[] = []
+    const variacoesValidas = variacoesParaCriar.filter(v => {
+      if (skusExistentes.has(v.sku)) {
+        erros.push(`SKU '${v.sku}' já existe`)
+        return false
+      }
+      return true
+    })
+
+    // OTIMIZAÇÃO: Criar todas as variações em uma transação
+    const variacoesCriadas = await prisma.$transaction(async (tx) => {
+      const created = []
+      
+      for (const variacao of variacoesValidas) {
+        const variacaoCriada = await tx.produto.create({
+          data: {
+            produtoPaiId: produtoPaiId,
+            nome: variacao.nome,
+            sku: variacao.sku,
+            peso: produtoPai.peso,
+            cubagem: produtoPai.cubagem,
+            crossDocking: produtoPai.crossDocking,
+            estoque: produtoPai.estoque,
+            ativo: true,
+            usuarioId: userId,
+            atributos: {
+              create: variacao.combinacao.map(c => ({
+                atributo: c.tipo,
+                valor: c.valor,
+              })),
+            },
           },
-        },
-        include: {
-          atributos: true,
-        },
-      })
-
-      variacoesCriadas.push(variacao)
-    }
+          include: {
+            atributos: true,
+          },
+        })
+        
+        created.push(variacaoCriada)
+      }
+      
+      return created
+    })
 
     return NextResponse.json({
       sucesso: true,
@@ -147,10 +180,10 @@ export async function POST(
       erros,
     })
   } catch (error) {
-    console.error('Erro ao gerar variações:', error)
+    logger.error('Erro ao gerar variações:', error)
     return NextResponse.json(
       { erro: 'Erro ao gerar variações' },
       { status: 500 }
     )
   }
-}
+})

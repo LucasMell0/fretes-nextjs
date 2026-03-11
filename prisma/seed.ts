@@ -21,6 +21,64 @@ async function main() {
   })
   console.log('✅ Usuário admin criado:', admin.email)
 
+  // Criar canais de integração
+  const canais = await prisma.canalIntegracao.createMany({
+    data: [
+      {
+        nome: 'Bling ERP',
+        slug: 'erp-bling',
+        tipo: 'ERP',
+        logoUrl: '/logos/bling.png',
+        endpointPattern: '/api/v1/erp-bling/webhook/{token}',
+        metodosHttp: ['POST'],
+        payloadExemplo: {
+          produto: { id: 12345678 },
+          saldoFisicoTotal: 1500.75,
+          saldoVirtualTotal: 1500.75
+        },
+        responseExemplo: {
+          success: true,
+          message: 'Webhook processed successfully'
+        },
+        ativo: true,
+      },
+      {
+        nome: 'Mercado Livre',
+        slug: 'marketplace-mercadolivre',
+        tipo: 'MARKETPLACE',
+        logoUrl: null,
+        endpointPattern: '/api/v1/marketplace/mercadolivre/webhook/{token}',
+        metodosHttp: ['POST'],
+        payloadExemplo: {
+          topic: 'orders_v2',
+          resource: '/orders/123456789'
+        },
+        responseExemplo: {
+          success: true
+        },
+        ativo: true,
+      },
+      {
+        nome: 'Shopee',
+        slug: 'marketplace-shopee',
+        tipo: 'MARKETPLACE',
+        logoUrl: null,
+        endpointPattern: '/api/v1/marketplace/shopee/webhook/{token}',
+        metodosHttp: ['POST'],
+        payloadExemplo: {
+          event: 'order.update',
+          data: {}
+        },
+        responseExemplo: {
+          success: true
+        },
+        ativo: true,
+      },
+    ],
+    skipDuplicates: true,
+  })
+  console.log('✅ Canais de integração criados:', canais.count)
+
   // Criar transportadora de exemplo
   const transportadora = await prisma.transportadora.create({
     data: {

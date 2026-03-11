@@ -1,16 +1,31 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { logger } from '@/lib/logger'
+import { withAuth } from '@/lib/middleware/auth'
+import { getSessionUserId } from '@/lib/utils/parse'
 
 // OTIMIZADO: Cache de 60 segundos para reduzir carga no banco
 export const revalidate = 60
 
-export async function GET() {
+export const GET = withAuth(async (req, { userId }) => {
   try {
-    const hoje = new Date()
-    hoje.setHours(0, 0, 0, 0)
+    // Obter parâmetro de dias (padrão: 90)
+    const { searchParams } = new URL(req.url)
+    const diasParam = searchParams.get('dias')
+    const dias = diasParam ? parseInt(diasParam) : 7
     
-    const noventaDiasAtras = new Date(hoje)
-    noventaDiasAtras.setDate(noventaDiasAtras.getDate() - 89)
+    // Validar dias (apenas 7, 30 ou 90)
+    const diasValidos = [7, 30, 90]
+    const diasFiltro = diasValidos.includes(dias) ? dias : 7
+    
+    const hoje = new Date()
+    hoje.setHours(23, 59, 59, 999) // Fim do dia de hoje
+    
+    const dataInicio = new Date(hoje)
+    dataInicio.setDate(dataInicio.getDate() - (diasFiltro - 1))
+    dataInicio.setHours(0, 0, 0, 0) // Início do dia
+
+    const usuarioId = userId
 
     const [
       totalTransportadoras,
@@ -19,12 +34,13 @@ export async function GET() {
       todasCotacoes,
       produtosCotados,
     ] = await Promise.all([
-      prisma.transportadora.count({ where: { ativo: true } }),
-      prisma.transportadoraRegiao.count({ where: { ativo: true } }),
-      prisma.produto.count({ where: { ativo: true } }),
+      prisma.transportadora.count({ where: { ativo: true, usuarioId } }),
+      prisma.transportadoraRegiao.count({ where: { ativo: true, usuarioId } }),
+      prisma.produto.count({ where: { ativo: true, usuarioId } }),
       prisma.cotacaoLog.findMany({
         where: {
-          dataCotacao: { gte: noventaDiasAtras },
+          dataCotacao: { gte: dataInicio },
+          usuarioId,
         },
         select: {
           dataCotacao: true,
@@ -33,24 +49,23 @@ export async function GET() {
       prisma.cotacaoLogProduto.findMany({
         where: {
           cotacao: {
-            dataCotacao: { gte: noventaDiasAtras },
+            dataCotacao: { gte: dataInicio },
+            usuarioId,
           },
         },
         select: {
           produtoId: true,
           produtoNome: true,
           produtoSku: true,
-          cotacao: {
-            select: {
-              dataCotacao: true,
-            },
-          },
+          cotacaoLogId: true,
         },
       }),
     ])
 
     // OTIMIZADO: Contar cotações de hoje a partir dos dados já carregados
-    const hojeStr = hoje.toISOString().split('T')[0]
+    const hojeInicio = new Date()
+    hojeInicio.setHours(0, 0, 0, 0)
+    const hojeStr = hojeInicio.toISOString().split('T')[0]
     const cotacoesHoje = todasCotacoes.filter(c => 
       c.dataCotacao.toISOString().split('T')[0] === hojeStr
     ).length
@@ -64,9 +79,9 @@ export async function GET() {
       cotacoesPorDiaMap.set(dataStr, (cotacoesPorDiaMap.get(dataStr) || 0) + 1)
     })
 
-    // Gerar array de 90 dias (O(90))
-    const cotacoesPorDia = Array.from({ length: 90 }, (_, i) => {
-      const data = new Date(noventaDiasAtras)
+    // Gerar array de dias dinâmico
+    const cotacoesPorDia = Array.from({ length: diasFiltro }, (_, i) => {
+      const data = new Date(dataInicio)
       data.setDate(data.getDate() + i)
       const dataStr = data.toISOString().split('T')[0]
       
@@ -76,13 +91,31 @@ export async function GET() {
       }
     })
 
-    // Retornar todos os produtos com data para filtragem no frontend
-    const topProdutos = produtosCotados.map(p => ({
-      nome: p.produtoNome,
-      sku: p.produtoSku,
-      total_cotacoes: 1,
-      data_cotacao: p.cotacao.dataCotacao.toISOString().split('T')[0],
-    }))
+    // Agrupar produtos e contar cotações
+    const produtosMap = new Map<number, { nome: string; sku: string; count: number }>()
+    
+    produtosCotados.forEach(p => {
+      const existing = produtosMap.get(p.produtoId)
+      if (existing) {
+        existing.count++
+      } else {
+        produtosMap.set(p.produtoId, {
+          nome: p.produtoNome,
+          sku: p.produtoSku,
+          count: 1,
+        })
+      }
+    })
+
+    // Converter para array, ordenar e pegar TOP 5
+    const topProdutos = Array.from(produtosMap.values())
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5)
+      .map(p => ({
+        nome: p.nome,
+        sku: p.sku,
+        total_cotacoes: p.count,
+      }))
 
     return NextResponse.json({
       cards: {
@@ -95,10 +128,10 @@ export async function GET() {
       topProdutos,
     })
   } catch (error) {
-    console.error('Erro ao buscar estatísticas:', error)
+    logger.error('Erro ao buscar estatísticas:', error)
     return NextResponse.json(
       { erro: 'Erro ao buscar estatísticas' },
       { status: 500 }
     )
   }
-}
+})

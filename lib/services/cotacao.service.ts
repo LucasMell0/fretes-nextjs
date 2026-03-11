@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { Decimal } from '@prisma/client/runtime/library'
+import { logger } from '@/lib/logger'
 import type {
   ProdutoCotacao,
   ResultadoCotacao,
@@ -10,23 +11,23 @@ export class CotacaoService {
   /**
    * Realiza cotação de frete para um CEP e lista de produtos
    */
-  async cotar(cep: string, produtos: ProdutoCotacao[]): Promise<ResultadoCotacao[]> {
+  async cotar(cep: string, produtos: ProdutoCotacao[], usuarioId?: number): Promise<ResultadoCotacao[]> {
     const cepLimpo = cep.replace(/\D/g, '')
     
-    const regioes = await this.buscarTransportadorasPorCep(cepLimpo)
+    const regioes = await this.buscarTransportadorasPorCep(cepLimpo, usuarioId)
     
     if (regioes.length === 0) {
       return []
     }
 
-    const produtosCompletos = await this.buscarDadosProdutos(produtos)
+    const produtosCompletos = await this.buscarDadosProdutos(produtos, usuarioId)
     
     // OTIMIZADO: Calcular todas as cotações em paralelo
     const cotacoesPromises = regioes.map(async (regiao) => {
       try {
         return await this.calcularCotacao(regiao, produtosCompletos)
       } catch (error) {
-        console.error(`Erro ao calcular cotação para transportadora ${regiao.transportadora.nome}:`, error)
+        logger.error(`Erro ao calcular cotação para transportadora ${regiao.transportadora.nome}:`, error)
         return null
       }
     })
@@ -40,20 +41,27 @@ export class CotacaoService {
   /**
    * Busca transportadoras que atendem o CEP informado
    */
-  private async buscarTransportadorasPorCep(cep: string) {
-    return await prisma.transportadoraRegiao.findMany({
-      where: {
+  private async buscarTransportadorasPorCep(cep: string, usuarioId?: number) {
+    const whereClause: any = {
+      ativo: true,
+      transportadora: {
         ativo: true,
-        transportadora: {
-          ativo: true,
-        },
-        cepInicio: {
-          lte: cep,
-        },
-        cepFim: {
-          gte: cep,
-        },
       },
+      cepInicio: {
+        lte: cep,
+      },
+      cepFim: {
+        gte: cep,
+      },
+    }
+
+    // Filtrar por usuarioId se fornecido (isolamento multi-tenant)
+    if (usuarioId) {
+      whereClause.usuarioId = usuarioId
+    }
+
+    return await prisma.transportadoraRegiao.findMany({
+      where: whereClause,
       include: {
         transportadora: true,
         precos: {
@@ -70,18 +78,30 @@ export class CotacaoService {
   /**
    * Busca dados completos dos produtos no banco
    */
-  private async buscarDadosProdutos(produtos: ProdutoCotacao[]) {
+  private async buscarDadosProdutos(produtos: ProdutoCotacao[], usuarioId?: number) {
     const skus = produtos.map(p => p.sku)
     
-    const produtosDB = await prisma.produto.findMany({
-      where: {
-        sku: {
-          in: skus,
-        },
-        ativo: true,
+    const whereClause: any = {
+      sku: {
+        in: skus,
       },
+      ativo: true,
+    }
+
+    // Filtrar por usuarioId se fornecido (isolamento multi-tenant)
+    if (usuarioId) {
+      whereClause.usuarioId = usuarioId
+    }
+
+    const produtosDB = await prisma.produto.findMany({
+      where: whereClause,
       include: {
         cubagens: true,
+        produtoPai: {
+          include: {
+            cubagens: true,
+          },
+        },
       },
     })
 
@@ -112,13 +132,17 @@ export class CotacaoService {
       const quantidade = (produto as any).quantidade || 1
       const valorVenda = (produto as any).valorVenda || 0
       
-      const cubagemEspecifica = produto.cubagens.find(c => c.transportadoraId === regiao.transportadoraId)
+      // Verificar se deve usar dados do produto pai
+      const usarDadosPai = produto.produtoPai && (produto.produtoPai as any).usarDadosPaiParaVariacoes
+      const produtoReferencia = usarDadosPai && produto.produtoPai ? produto.produtoPai : produto
+      
+      const cubagemEspecifica = produtoReferencia.cubagens.find(c => c.transportadoraId === regiao.transportadoraId)
       
       const cubagemM3 = cubagemEspecifica 
         ? Number(cubagemEspecifica.cubagem) 
-        : Number(produto.cubagem)
+        : Number(produtoReferencia.cubagem)
       
-      const pesoRealUnitario = Number(produto.peso)
+      const pesoRealUnitario = Number(produtoReferencia.peso)
       const pesoCubadoUnitario = this.calcularPesoCubado(fatorCubagem, cubagemM3)
       
       pesoReal += pesoRealUnitario * quantidade
@@ -387,12 +411,16 @@ export class CotacaoService {
               const produtoDB = produtosPorSku.get(p.sku)
               if (!produtoDB) return null
 
+              const pesoUnitario = Number(produtoDB.peso)
+              const pesoTotal = pesoUnitario * p.quantidade
+
               return {
                 produtoId: produtoDB.id,
                 produtoNome: produtoDB.nome,
                 produtoSku: produtoDB.sku,
                 quantidade: p.quantidade,
-                pesoTotal: Number(produtoDB.peso) * p.quantidade,
+                pesoTotal,
+                usuarioId,
               }
             })
             .filter((p): p is NonNullable<typeof p> => p !== null),

@@ -45,6 +45,7 @@ export class ImportacaoService {
                 cepInicio: regiao.cepInicio,
                 cepFim: regiao.cepFim,
                 ativo: true,
+                usuarioId: tenantId,
               },
             })
 

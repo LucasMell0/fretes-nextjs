@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cotacaoService } from '@/lib/services/cotacao.service'
+import { rateLimitMiddleware } from '@/lib/rate-limit'
+import { logger } from '@/lib/logger'
 import { z } from 'zod'
 
 const produtoSchema = z.object({
@@ -17,6 +19,17 @@ const cotacaoSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate limiting: 20 requisições por minuto
+    const rateLimitResponse = rateLimitMiddleware(request, {
+      maxRequests: 20,
+      windowSeconds: 60
+    })
+    
+    if (rateLimitResponse) {
+      logger.warn('Rate limit excedido em /api/v1/cotacao')
+      return rateLimitResponse
+    }
+
     const body = await request.json()
     
     const validation = cotacaoSchema.safeParse(body)
@@ -74,7 +87,7 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     )
   } catch (error) {
-    console.error('Erro ao processar cotação:', error)
+    logger.error('Erro ao processar cotação:', error)
     
     return NextResponse.json(
       {

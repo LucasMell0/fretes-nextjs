@@ -1,26 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { logger } from '@/lib/logger'
 import { z } from 'zod'
+import { withAuthTyped } from '@/lib/middleware/auth'
+import { parseRouteId } from '@/lib/utils/parse'
+import { verifyOwnership } from '@/lib/utils/ownership'
+import { verifyTransportadoraOwnership } from '@/lib/validators/relationship.validator'
+
+interface RouteParams {
+  id: string
+}
 
 const cubagemSchema = z.object({
   transportadoraId: z.number().int().positive(),
   cubagem: z.number().min(0),
 })
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export const GET = withAuthTyped<RouteParams>(async (req, { userId }, params) => {
   try {
-    const produtoId = parseInt(params.id)
+    const produtoId = parseRouteId(params!.id)
 
-    const produto = await prisma.produto.findUnique({
-      where: { id: produtoId },
-    })
+    const produto = await verifyOwnership(
+      prisma.produto,
+      produtoId,
+      userId
+    )
 
     if (!produto) {
       return NextResponse.json(
-        { erro: 'Produto não encontrado' },
+        { erro: 'Produto não encontrado ou sem permissão' },
         { status: 404 }
       )
     }
@@ -43,7 +51,10 @@ export async function GET(
     })
 
     const transportadoras = await prisma.transportadora.findMany({
-      where: { ativo: true },
+      where: {
+        ativo: true,
+        usuarioId: userId,
+      },
       select: {
         id: true,
         nome: true,
@@ -53,24 +64,36 @@ export async function GET(
 
     return NextResponse.json({
       produto,
-      cubagens,
       transportadoras,
+      cubagens,
     })
   } catch (error) {
+    logger.error('Erro ao buscar cubagens:', error)
     return NextResponse.json(
       { erro: 'Erro ao buscar cubagens' },
       { status: 500 }
     )
   }
-}
+})
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export const POST = withAuthTyped<RouteParams>(async (req, { userId }, params) => {
   try {
-    const produtoId = parseInt(params.id)
-    const body = await request.json()
+    const produtoId = parseRouteId(params!.id)
+
+    const produto = await verifyOwnership(
+      prisma.produto,
+      produtoId,
+      userId
+    )
+
+    if (!produto) {
+      return NextResponse.json(
+        { erro: 'Produto não encontrado ou sem permissão' },
+        { status: 404 }
+      )
+    }
+
+    const body = await req.json()
 
     const validation = cubagemSchema.safeParse(body)
     if (!validation.success) {
@@ -81,6 +104,19 @@ export async function POST(
     }
 
     const { transportadoraId, cubagem } = validation.data
+
+    // Verificar se transportadora pertence ao usuário
+    const transportadoraValida = await verifyTransportadoraOwnership(
+      transportadoraId,
+      userId
+    )
+
+    if (!transportadoraValida) {
+      return NextResponse.json(
+        { erro: 'Transportadora não encontrada ou sem permissão' },
+        { status: 404 }
+      )
+    }
 
     // Verificar se já existe
     const existente = await prisma.produtoTransportadoraCubagem.findFirst({
@@ -115,10 +151,10 @@ export async function POST(
       return NextResponse.json(novaCubagem, { status: 201 })
     }
   } catch (error) {
-    console.error('Erro ao salvar cubagem:', error)
+    logger.error('Erro ao salvar cubagem:', error)
     return NextResponse.json(
       { erro: 'Erro ao salvar cubagem' },
       { status: 500 }
     )
   }
-}
+})

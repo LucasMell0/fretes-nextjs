@@ -26,6 +26,7 @@ import { ArrowLeft, Plus, Pencil, Trash2, Loader2, Save, X } from 'lucide-react'
 import { usePagination } from '@/hooks/use-pagination'
 import { PaginationWrapper } from '@/components/ui/pagination-wrapper'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { Checkbox } from '@/components/ui/checkbox'
 
 interface Regiao {
   id: number
@@ -55,10 +56,12 @@ export default function PrecosPage() {
   const [regiao, setRegiao] = useState<Regiao | null>(null)
   const [precos, setPrecos] = useState<Preco[]>([])
   const pagination = usePagination(precos, 10)
+  const [selecionados, setSelecionados] = useState<Set<number>>(new Set())
   const [kgAdicional, setKgAdicional] = useState<number>(0)
   const [salvandoKgAdicional, setSalvandoKgAdicional] = useState(false)
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false)
   const [precoParaExcluir, setPrecoParaExcluir] = useState<number | null>(null)
+  const [confirmDeleteMultipleOpen, setConfirmDeleteMultipleOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editandoId, setEditandoId] = useState<number | null>(null)
@@ -273,9 +276,51 @@ export default function PrecosPage() {
   }
 
   const formatarCep = (cep: string) => {
-    const cepLimpo = cep.replace(/\D/g, '')
-    if (cepLimpo.length !== 8) return cep
-    return `${cepLimpo.slice(0, 5)}-${cepLimpo.slice(5, 8)}`
+    return cep.replace(/(\d{5})(\d{3})/, '$1-$2')
+  }
+
+  const toggleSelecionado = (id: number) => {
+    const novoSet = new Set(selecionados)
+    if (novoSet.has(id)) {
+      novoSet.delete(id)
+    } else {
+      novoSet.add(id)
+    }
+    setSelecionados(novoSet)
+  }
+
+  const selecionarTodos = () => {
+    if (selecionados.size === pagination.paginatedItems.length && pagination.paginatedItems.length > 0) {
+      setSelecionados(new Set())
+    } else {
+      setSelecionados(new Set(pagination.paginatedItems.map(p => p.id)))
+    }
+  }
+
+  const deletarSelecionados = async () => {
+    if (selecionados.size === 0) return
+
+    try {
+      const deletePromises = Array.from(selecionados).map(id =>
+        fetch(`/api/regioes/${regiaoId}/precos/${id}`, { method: 'DELETE' })
+      )
+
+      await Promise.all(deletePromises)
+
+      toast({
+        title: 'Pre\u00e7os deletados!',
+        description: `${selecionados.size} faixa(s) de pre\u00e7o deletada(s) com sucesso`,
+      })
+
+      setSelecionados(new Set())
+      setConfirmDeleteMultipleOpen(false)
+      carregarDados()
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao deletar faixas de pre\u00e7o',
+      })
+    }
   }
 
   return (
@@ -359,15 +404,32 @@ export default function PrecosPage() {
               Defina os valores por faixa de peso
             </p>
           </div>
-          <Button onClick={abrirDialogNovo}>
-            <Plus className="mr-2 h-4 w-4" />
-            Nova Faixa
-          </Button>
+          <div className="flex gap-2">
+            {selecionados.size > 0 && (
+              <Button 
+                variant="destructive" 
+                onClick={() => setConfirmDeleteMultipleOpen(true)}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Deletar Selecionados ({selecionados.size})
+              </Button>
+            )}
+            <Button onClick={abrirDialogNovo}>
+              <Plus className="mr-2 h-4 w-4" />
+              Nova Faixa
+            </Button>
+          </div>
         </div>
         {precos.length > 0 ? (
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
+                <TableHead className="w-12">
+                  <Checkbox
+                    checked={selecionados.size === pagination.paginatedItems.length && pagination.paginatedItems.length > 0}
+                    onCheckedChange={selecionarTodos}
+                  />
+                </TableHead>
                 <TableHead className="font-semibold">Peso Inicial (kg)</TableHead>
                 <TableHead className="font-semibold">Peso Final (kg)</TableHead>
                 <TableHead className="font-semibold">Valor (R$)</TableHead>
@@ -378,6 +440,13 @@ export default function PrecosPage() {
             <TableBody>
               {pagination.paginatedItems.map((p) => (
                 <TableRow key={p.id} className={editandoId === p.id ? 'bg-muted/50' : ''}>
+                  <TableCell>
+                    <Checkbox
+                      checked={selecionados.has(p.id)}
+                      onCheckedChange={() => toggleSelecionado(p.id)}
+                      disabled={editandoId === p.id}
+                    />
+                  </TableCell>
                   <TableCell>
                     {editandoId === p.id && editData ? (
                       <Input
@@ -551,6 +620,16 @@ export default function PrecosPage() {
         onConfirm={confirmarExclusao}
         title="Excluir faixa de preço"
         description="Tem certeza que deseja excluir esta faixa de preço? Esta ação não pode ser desfeita."
+      />
+
+      <ConfirmDialog
+        open={confirmDeleteMultipleOpen}
+        onOpenChange={setConfirmDeleteMultipleOpen}
+        onConfirm={deletarSelecionados}
+        title={`Excluir ${selecionados.size} faixa(s) de preço`}
+        description={`Tem certeza que deseja excluir ${selecionados.size} faixa(s) de preço selecionada(s)? Esta ação não pode ser desfeita.`}
+        confirmText="Excluir Todas"
+        cancelText="Cancelar"
       />
     </div>
   )

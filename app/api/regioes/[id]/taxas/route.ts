@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { logger } from '@/lib/logger'
 import { z } from 'zod'
+import { TipoTaxa, Prisma } from '@prisma/client'
+import { withAuthTyped } from '@/lib/middleware/auth'
+import { parseRouteId } from '@/lib/utils/parse'
+import { verifyOwnership } from '@/lib/utils/ownership'
+import type { TransportadoraRegiaoWithTaxas } from '@/lib/types/prisma-helpers'
+
+interface RouteParams {
+  id: string
+}
 
 const taxasSchema = z.object({
   // Frete Valor
@@ -66,24 +76,23 @@ const taxasSchema = z.object({
   icms: z.number().min(0).max(100).optional(),
 })
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export const GET = withAuthTyped<RouteParams>(async (req, { userId }, params) => {
   try {
-    const regiaoId = parseInt(params.id)
+    const regiaoId = parseRouteId(params!.id)
 
-    const regiao = await prisma.transportadoraRegiao.findUnique({
-      where: { id: regiaoId },
-      include: {
+    const regiao = await verifyOwnership<TransportadoraRegiaoWithTaxas>(
+      prisma.transportadoraRegiao,
+      regiaoId,
+      userId,
+      {
         transportadora: true,
         taxas: true,
-      },
-    })
+      }
+    )
 
     if (!regiao) {
       return NextResponse.json(
-        { erro: 'Região não encontrada' },
+        { erro: 'Região não encontrada ou sem permissão' },
         { status: 404 }
       )
     }
@@ -93,20 +102,18 @@ export async function GET(
       taxas: regiao.taxas,
     })
   } catch (error) {
+    logger.error('Erro ao buscar taxas:', error)
     return NextResponse.json(
       { erro: 'Erro ao buscar taxas' },
       { status: 500 }
     )
   }
-}
+})
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export const PUT = withAuthTyped<RouteParams>(async (req, { userId }, params) => {
   try {
-    const regiaoId = parseInt(params.id)
-    const body = await request.json()
+    const regiaoId = parseRouteId(params!.id)
+    const body = await req.json()
 
     const validation = taxasSchema.safeParse(body)
     if (!validation.success) {
@@ -116,15 +123,18 @@ export async function POST(
       )
     }
 
-    // Verificar se região existe
-    const regiao = await prisma.transportadoraRegiao.findUnique({
-      where: { id: regiaoId },
-      include: { taxas: true },
-    })
+    const regiao = await verifyOwnership<TransportadoraRegiaoWithTaxas>(
+      prisma.transportadoraRegiao,
+      regiaoId,
+      userId,
+      {
+        taxas: true,
+      }
+    )
 
     if (!regiao) {
       return NextResponse.json(
-        { erro: 'Região não encontrada' },
+        { erro: 'Região não encontrada ou sem permissão' },
         { status: 404 }
       )
     }
@@ -149,10 +159,10 @@ export async function POST(
 
     return NextResponse.json(taxas)
   } catch (error) {
-    console.error('Erro ao salvar taxas:', error)
+    logger.error('Erro ao salvar taxas:', error)
     return NextResponse.json(
       { erro: 'Erro ao salvar taxas' },
       { status: 500 }
     )
   }
-}
+})

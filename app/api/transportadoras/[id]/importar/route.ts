@@ -1,29 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import { logger } from '@/lib/logger'
 import { ImportacaoService } from '@/lib/services/importacao.service'
+import { withAuthTyped } from '@/lib/middleware/auth'
+import { parseRouteId } from '@/lib/utils/parse'
+import { verifyOwnership } from '@/lib/utils/ownership'
+
+interface RouteParams {
+  id: string
+}
 import { importacaoRequestSchema } from '@/lib/validators/importacao.validator'
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export const POST = withAuthTyped<RouteParams>(async (req, { userId }, params) => {
   try {
-    const session = await getServerSession(authOptions)
-    
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        { erro: 'Não autorizado' },
-        { status: 401 }
-      )
-    }
+    const transportadoraId = parseRouteId(params!.id)
 
-    const transportadoraId = parseInt(params.id)
-    
-    if (isNaN(transportadoraId)) {
+    const transportadora = await verifyOwnership(
+      prisma.transportadora,
+      transportadoraId,
+      userId
+    )
+
+    if (!transportadora) {
       return NextResponse.json(
-        { erro: 'ID da transportadora inválido' },
-        { status: 400 }
+        { erro: 'Transportadora não encontrada ou sem permissão' },
+        { status: 404 }
       )
     }
 
@@ -47,7 +48,7 @@ export async function POST(
     const service = new ImportacaoService()
     const resultado = await service.importarRegioes(
       transportadoraId,
-      parseInt(session.user.id),
+      userId,
       validacao.data.regioes
     )
 
@@ -68,10 +69,10 @@ export async function POST(
       mensagem: `Importação concluída! ${resultado.regioesImportadas} regiões e ${resultado.faixasImportadas} faixas de peso importadas.`
     })
   } catch (error) {
-    console.error('Erro na importação:', error)
+    logger.error('Erro na importação:', error)
     return NextResponse.json(
       { erro: 'Erro interno do servidor' },
       { status: 500 }
     )
   }
-}
+})

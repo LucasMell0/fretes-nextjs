@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { logger } from '@/lib/logger'
 import { z } from 'zod'
+import { withAuthTyped } from '@/lib/middleware/auth'
+import { parseRouteId } from '@/lib/utils/parse'
+import { verifyOwnership } from '@/lib/utils/ownership'
+
+interface RouteParams {
+  id: string
+  precoId: string
+}
 import { verificarSobreposicaoFaixa } from '@/lib/validators/faixa-peso.validator'
 
 const precoSchema = z.object({
@@ -10,14 +19,11 @@ const precoSchema = z.object({
   prazo: z.number().int().min(0).optional(),
 })
 
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: { id: string; precoId: string } }
-) {
+export const PUT = withAuthTyped<RouteParams>(async (req, { userId }, params) => {
   try {
-    const regiaoId = parseInt(params.id)
-    const precoId = parseInt(params.precoId)
-    const body = await request.json()
+    const regiaoId = parseRouteId(params!.id)
+    const precoId = parseRouteId(params!.precoId)
+    const body = await req.json()
 
     const validation = precoSchema.safeParse(body)
     if (!validation.success) {
@@ -28,6 +34,19 @@ export async function PUT(
     }
 
     // Verificar se preço pertence à região
+    const regiao = await verifyOwnership(
+      prisma.transportadoraRegiao,
+      regiaoId,
+      userId
+    )
+
+    if (!regiao) {
+      return NextResponse.json(
+        { erro: 'Região não encontrada ou sem permissão' },
+        { status: 404 }
+      )
+    }
+
     const preco = await prisma.transportadoraRegiaoPreco.findFirst({
       where: {
         id: precoId,
@@ -75,32 +94,28 @@ export async function PUT(
 
     return NextResponse.json(precoAtualizado)
   } catch (error) {
+    logger.error('Erro ao atualizar preço:', error)
     return NextResponse.json(
       { erro: 'Erro ao atualizar preço' },
       { status: 500 }
     )
   }
-}
+})
 
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { id: string; precoId: string } }
-) {
+export const DELETE = withAuthTyped<RouteParams>(async (req, { userId }, params) => {
   try {
-    const regiaoId = parseInt(params.id)
-    const precoId = parseInt(params.precoId)
+    const regiaoId = parseRouteId(params!.id)
+    const precoId = parseRouteId(params!.precoId)
 
-    // Verificar se preço pertence à região
-    const preco = await prisma.transportadoraRegiaoPreco.findFirst({
-      where: {
-        id: precoId,
-        transportadoraRegiaoId: regiaoId,
-      },
-    })
+    const regiao = await verifyOwnership(
+      prisma.transportadoraRegiao,
+      regiaoId,
+      userId
+    )
 
-    if (!preco) {
+    if (!regiao) {
       return NextResponse.json(
-        { erro: 'Preço não encontrado' },
+        { erro: 'Preço não encontrado ou sem permissão' },
         { status: 404 }
       )
     }
@@ -111,9 +126,10 @@ export async function DELETE(
 
     return NextResponse.json({ sucesso: true })
   } catch (error) {
+    logger.error('Erro ao excluir preço:', error)
     return NextResponse.json(
       { erro: 'Erro ao excluir preço' },
       { status: 500 }
     )
   }
-}
+})
