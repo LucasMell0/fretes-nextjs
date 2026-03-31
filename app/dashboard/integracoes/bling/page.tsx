@@ -399,9 +399,9 @@ export default function BlingImportacaoPage() {
                 <br />
                 1. Acesse Configurações → Webhooks
                 <br />
-                2. Clique em "Novo Webhook"
+                2. Clique em &quot;Novo Webhook&quot;
                 <br />
-                3. Selecione o evento "Estoque"
+                3. Selecione o evento &quot;Estoque&quot;
                 <br />
                 4. Cole a URL acima
                 <br />
