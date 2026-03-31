@@ -14,7 +14,7 @@ export interface AuthContext {
 /**
  * Tipo do handler autenticado
  */
-export type AuthenticatedHandler<T = any> = (
+export type AuthenticatedHandler<T = unknown> = (
   req: NextRequest,
   context: AuthContext,
   params?: T
@@ -44,7 +44,7 @@ export type AuthenticatedHandler<T = any> = (
  *   return NextResponse.json(produto)
  * })
  */
-export function withAuth<T = any>(
+export function withAuth<T = unknown>(
   handler: AuthenticatedHandler<T>
 ) {
   return async (
@@ -73,10 +73,10 @@ export function withAuth<T = any>(
       )
     } catch (error) {
       // Erros de validação (ex: parseRouteId)
-      if (error instanceof Error && (error as any).status) {
+      if (error instanceof Error && (error as Error & { status?: number }).status) {
         return NextResponse.json(
           { erro: error.message },
-          { status: (error as any).status }
+          { status: (error as Error & { status?: number }).status }
         )
       }
 
@@ -107,5 +107,5 @@ export function withAuthTyped<TParams>(
     params?: TParams
   ) => Promise<NextResponse> | NextResponse
 ) {
-  return withAuth<TParams>(handler as any)
+  return withAuth<TParams>(handler as AuthenticatedHandler<TParams>)
 }

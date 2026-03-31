@@ -11,8 +11,6 @@ import { logger } from '@/lib/logger'
 
 const ALGORITHM = 'aes-256-gcm'
 const IV_LENGTH = 16
-const AUTH_TAG_LENGTH = 16
-
 function getEncryptionKey(): Buffer {
   const key = process.env.ENCRYPTION_KEY
   

@@ -1,11 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
 import { withAuth } from '@/lib/middleware/auth'
 
 export const revalidate = 60
 
-export const GET = withAuth(async (req, { userId }) => {
+export const GET = withAuth(async (_req, { userId: _userId }) => {
   try {
     const canais = await prisma.canalIntegracao.findMany({
       where: {

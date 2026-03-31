@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { encrypt } from '@/lib/crypto'
 import { logger } from '@/lib/logger'
-import type { IntegracaoWithConfig } from '@/lib/types/prisma-helpers'
 
 /**
  * API para receber callback OAuth2 do Bling
@@ -48,7 +47,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const config = integracao.config as Record<string, any>
+    const config = integracao.config as Record<string, unknown>
     
     if (!config?.oauthState || config.oauthState !== state) {
       return NextResponse.redirect(
@@ -57,7 +56,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Verificar se state não expirou (5 minutos)
-    const stateAge = Date.now() - (config.oauthTimestamp || 0)
+    const stateAge = Date.now() - (Number(config.oauthTimestamp) || 0)
     if (stateAge > 5 * 60 * 1000) {
       return NextResponse.redirect(
         `${request.nextUrl.origin}/dashboard/integracoes?error=state_expired`

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
+import Image from 'next/image'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -10,7 +11,7 @@ import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/components/ui/use-toast'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
-import { Package, Loader2, Copy, Check, Settings, AlertCircle, Plus, Trash2, RefreshCw, CheckCircle2 } from 'lucide-react'
+import { Package, Loader2, Copy, Check, AlertCircle, Plus, Trash2, RefreshCw, CheckCircle2 } from 'lucide-react'
 
 interface Canal {
   id: number
@@ -41,10 +42,6 @@ interface Integracao {
   }
 }
 
-interface ConfiguracaoBling {
-  apiKey: string
-}
-
 export default function IntegracoesPage() {
   const { toast } = useToast()
   const [canais, setCanais] = useState<Canal[]>([])
@@ -56,6 +53,7 @@ export default function IntegracoesPage() {
 
   useEffect(() => {
     carregarDados()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const carregarDados = async () => {
@@ -159,13 +157,6 @@ export default function IntegracoesPage() {
     setTimeout(() => setCopiedToken(null), 2000)
   }
 
-  const copiarToken = (token: string) => {
-    navigator.clipboard.writeText(token)
-    setCopiedToken(token)
-    toast({ title: 'Token copiado!' })
-    setTimeout(() => setCopiedToken(null), 2000)
-  }
-
   const canaisMarketplace = useMemo(
     () => canais.filter((c) => c.tipo === 'MARKETPLACE'),
     [canais]
@@ -175,10 +166,6 @@ export default function IntegracoesPage() {
     () => canais.filter((c) => c.tipo === 'ERP'),
     [canais]
   )
-
-  const getIntegracao = (canalId: number) => {
-    return integracoes.find((i) => i.canal.id === canalId)
-  }
 
   const getIntegracoesPorCanal = (canalId: number) => {
     return integracoes.filter((i) => i.canal.id === canalId)
@@ -245,7 +232,6 @@ export default function IntegracoesPage() {
                   onDeletar={iniciarExclusao}
                   copiedToken={copiedToken}
                   onCopyEndpoint={copiarEndpoint}
-                  onCopyToken={copiarToken}
                 />
               )
             })}
@@ -256,7 +242,7 @@ export default function IntegracoesPage() {
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {canaisERP.map((canal) => {
               const integracoesCanal = getIntegracoesPorCanal(canal.id)
-              
+
               // Tratamento especial para Bling (OAuth)
               if (canal.slug === 'erp-bling') {
                 return (
@@ -274,12 +260,11 @@ export default function IntegracoesPage() {
                     onDeletar={iniciarExclusao}
                     copiedToken={copiedToken}
                     onCopyEndpoint={copiarEndpoint}
-                    onCopyToken={copiarToken}
                     isOAuth={true}
                   />
                 )
               }
-              
+
               // Outros canais ERP (webhook padrão)
               return (
                 <MultiIntegracaoCard
@@ -291,7 +276,6 @@ export default function IntegracoesPage() {
                   onDeletar={iniciarExclusao}
                   copiedToken={copiedToken}
                   onCopyEndpoint={copiarEndpoint}
-                  onCopyToken={copiarToken}
                 />
               )
             })}
@@ -320,7 +304,6 @@ interface MultiIntegracaoCardProps {
   onDeletar: (id: number) => void
   copiedToken: string | null
   onCopyEndpoint: (integracao: Integracao) => void
-  onCopyToken: (token: string) => void
   isOAuth?: boolean
 }
 
@@ -333,7 +316,6 @@ function MultiIntegracaoCard({
   onDeletar,
   copiedToken,
   onCopyEndpoint,
-  onCopyToken,
   isOAuth = false,
 }: MultiIntegracaoCardProps) {
   return (
@@ -343,7 +325,7 @@ function MultiIntegracaoCard({
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center">
               {canal.logoUrl ? (
-                <img src={canal.logoUrl} alt={canal.nome} className="h-8 w-8" />
+                <Image src={canal.logoUrl} alt={canal.nome} width={32} height={32} className="h-8 w-8" />
               ) : (
                 <span className="text-lg font-bold text-primary">
                   {canal.nome.charAt(0)}

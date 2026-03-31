@@ -10,15 +10,13 @@
  * logger.error('Erro crítico', error)
  */
 
-type LogLevel = 'info' | 'warn' | 'error' | 'debug'
-
 class Logger {
   private isDevelopment = process.env.NODE_ENV === 'development'
 
   /**
    * Log informativo - apenas em desenvolvimento
    */
-  info(message: string, ...args: any[]): void {
+  info(message: string, ...args: unknown[]): void {
     if (this.isDevelopment) {
       console.log(`ℹ️  ${message}`, ...args)
     }
@@ -27,7 +25,7 @@ class Logger {
   /**
    * Log de debug - apenas em desenvolvimento
    */
-  debug(message: string, ...args: any[]): void {
+  debug(message: string, ...args: unknown[]): void {
     if (this.isDevelopment) {
       console.debug(`🐛 ${message}`, ...args)
     }
@@ -36,14 +34,14 @@ class Logger {
   /**
    * Log de warning - sempre exibido
    */
-  warn(message: string, ...args: any[]): void {
+  warn(message: string, ...args: unknown[]): void {
     console.warn(`⚠️  ${message}`, ...args)
   }
 
   /**
    * Log de erro - sempre exibido
    */
-  error(message: string, ...args: any[]): void {
+  error(message: string, ...args: unknown[]): void {
     console.error(`❌ ${message}`, ...args)
   }
 

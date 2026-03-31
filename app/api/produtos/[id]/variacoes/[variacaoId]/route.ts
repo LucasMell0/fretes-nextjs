@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
 import { z } from 'zod'
@@ -83,7 +83,7 @@ export const DELETE = withAuthTyped<RouteParams>(async (req, { userId }, params)
     const produtoPaiId = parseRouteId(params!.id)
     const variacaoId = parseRouteId(params!.variacaoId)
 
-    const produtoPai = await verifyOwnership(
+    await verifyOwnership(
       prisma.produto,
       produtoPaiId,
       userId

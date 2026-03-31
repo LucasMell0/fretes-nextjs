@@ -72,6 +72,7 @@ export default function CubagensPage() {
 
   useEffect(() => {
     carregarDados()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [produtoId])
 
   const carregarDados = async () => {

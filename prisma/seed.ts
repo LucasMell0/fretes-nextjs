@@ -85,6 +85,7 @@ async function main() {
       nome: 'Transportadora Express',
       fatorCubagem: 300,
       ativo: true,
+      usuarioId: admin.id,
     },
   })
   console.log('✅ Transportadora criada:', transportadora.nome)
@@ -96,8 +97,8 @@ async function main() {
       nome: 'São Paulo Capital',
       cepInicio: '01000000',
       cepFim: '05999999',
-      icms: 12,
       ativo: true,
+      usuarioId: admin.id,
     },
   })
   console.log('✅ Região criada:', regiao.nome)
@@ -148,10 +149,10 @@ async function main() {
       grisMinimo: 15,
       despachoTipo: 'VALOR',
       despachoValor: 10,
-      pedagioTipo: 'VALOR',
       pedagioValor: 5,
       tasTipo: 'PERCENTUAL',
       tasValor: 0.3,
+      icms: 12,
     },
   })
   console.log('✅ Taxas configuradas')
@@ -167,6 +168,7 @@ async function main() {
         estoque: 10,
         crossDocking: 0,
         ativo: true,
+        usuarioId: admin.id,
       },
       {
         nome: 'Monitor LG 27" UltraWide',
@@ -176,6 +178,7 @@ async function main() {
         estoque: 5,
         crossDocking: 2,
         ativo: true,
+        usuarioId: admin.id,
       },
       {
         nome: 'Teclado Mecânico Gamer',
@@ -185,6 +188,7 @@ async function main() {
         estoque: 0,
         crossDocking: 5,
         ativo: true,
+        usuarioId: admin.id,
       },
       {
         nome: 'Mouse Wireless Logitech',
@@ -194,6 +198,7 @@ async function main() {
         estoque: 25,
         crossDocking: 0,
         ativo: true,
+        usuarioId: admin.id,
       },
       {
         nome: 'Webcam Full HD 1080p',
@@ -203,6 +208,7 @@ async function main() {
         estoque: 15,
         crossDocking: 0,
         ativo: true,
+        usuarioId: admin.id,
       },
     ],
   })

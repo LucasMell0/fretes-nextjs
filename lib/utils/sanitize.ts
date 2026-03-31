@@ -125,6 +125,7 @@ export function sanitizeURL(url: string): string {
  * @param options - Opções de sanitização
  * @returns Objeto sanitizado
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function sanitizeObject<T extends Record<string, any>>(
   obj: T,
   options: {
@@ -133,42 +134,42 @@ export function sanitizeObject<T extends Record<string, any>>(
   } = {}
 ): T {
   const { skipFields = [], sanitizeFn = sanitizeText } = options
-  
+
   if (!obj || typeof obj !== 'object') return obj
-  
+
   const sanitized = {} as T
-  
+
   for (const [key, value] of Object.entries(obj)) {
     // Pular campos especificados
     if (skipFields.includes(key)) {
       sanitized[key as keyof T] = value
       continue
     }
-    
+
     // Sanitizar strings
     if (typeof value === 'string') {
-      sanitized[key as keyof T] = sanitizeFn(value) as any
+      (sanitized as Record<string, unknown>)[key] = sanitizeFn(value)
     }
     // Recursão em objetos
     else if (value && typeof value === 'object' && !Array.isArray(value)) {
-      sanitized[key as keyof T] = sanitizeObject(value, options)
+      (sanitized as Record<string, unknown>)[key] = sanitizeObject(value, options)
     }
     // Recursão em arrays
     else if (Array.isArray(value)) {
-      sanitized[key as keyof T] = value.map(item =>
+      (sanitized as Record<string, unknown>)[key] = value.map(item =>
         typeof item === 'string'
           ? sanitizeFn(item)
           : typeof item === 'object'
           ? sanitizeObject(item, options)
           : item
-      ) as any
+      )
     }
     // Outros tipos (números, booleanos, etc.)
     else {
-      sanitized[key as keyof T] = value
+      (sanitized as Record<string, unknown>)[key] = value
     }
   }
-  
+
   return sanitized
 }
 

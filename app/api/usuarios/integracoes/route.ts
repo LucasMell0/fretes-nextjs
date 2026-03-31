@@ -1,7 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
-import { z } from 'zod'
 import { withAuth } from '@/lib/middleware/auth'
 import crypto from 'crypto'
 

@@ -82,6 +82,7 @@ export default function PrecosPage() {
 
   useEffect(() => {
     carregarDados()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [regiaoId])
 
   const carregarDados = async () => {

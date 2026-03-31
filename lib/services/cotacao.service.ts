@@ -1,5 +1,4 @@
 import { prisma } from '@/lib/prisma'
-import { Decimal } from '@prisma/client/runtime/library'
 import { logger } from '@/lib/logger'
 import type {
   ProdutoCotacao,
@@ -42,7 +41,7 @@ export class CotacaoService {
    * Busca transportadoras que atendem o CEP informado
    */
   private async buscarTransportadorasPorCep(cep: string, usuarioId?: number) {
-    const whereClause: any = {
+    const whereClause: Record<string, unknown> = {
       ativo: true,
       transportadora: {
         ativo: true,
@@ -81,7 +80,7 @@ export class CotacaoService {
   private async buscarDadosProdutos(produtos: ProdutoCotacao[], usuarioId?: number) {
     const skus = produtos.map(p => p.sku)
     
-    const whereClause: any = {
+    const whereClause: Record<string, unknown> = {
       sku: {
         in: skus,
       },
@@ -129,11 +128,11 @@ export class CotacaoService {
     let valorVendaTotal = 0
 
     for (const produto of produtos) {
-      const quantidade = (produto as any).quantidade || 1
-      const valorVenda = (produto as any).valorVenda || 0
-      
+      const quantidade = (produto as unknown as { quantidade: number }).quantidade || 1
+      const valorVenda = (produto as unknown as { valorVenda: number }).valorVenda || 0
+
       // Verificar se deve usar dados do produto pai
-      const usarDadosPai = produto.produtoPai && (produto.produtoPai as any).usarDadosPaiParaVariacoes
+      const usarDadosPai = produto.produtoPai && (produto.produtoPai as unknown as { usarDadosPaiParaVariacoes: boolean }).usarDadosPaiParaVariacoes
       const produtoReferencia = usarDadosPai && produto.produtoPai ? produto.produtoPai : produto
       
       const cubagemEspecifica = produtoReferencia.cubagens.find(c => c.transportadoraId === regiao.transportadoraId)
@@ -198,7 +197,7 @@ export class CotacaoService {
 
     const valorComTaxas = valorSemTaxas + valorTaxas
 
-    const aliquotaICMS = regiao.taxas ? Number((regiao.taxas as any).icms || 0) / 100 : 0
+    const aliquotaICMS = regiao.taxas ? Number((regiao.taxas as unknown as { icms: number }).icms || 0) / 100 : 0
     const valorICMS = valorComTaxas * aliquotaICMS
 
     let valorFinal = valorComTaxas + valorICMS

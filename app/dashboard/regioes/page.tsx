@@ -24,7 +24,6 @@ import {
 } from '@/components/ui/table'
 import { Plus, Pencil, Trash2, Loader2, Receipt, DollarSign, Upload } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { useMemo } from 'react'
 import {
   Select,
@@ -121,6 +120,7 @@ export default function RegioesPage() {
 
   useEffect(() => {
     carregarDados()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const carregarDados = async () => {

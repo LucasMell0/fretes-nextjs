@@ -88,16 +88,14 @@ export default function ProdutosPage() {
   const [paginaAtual, setPaginaAtual] = useState(1)
   const [itensPorPagina] = useState(10)
   const [loading, setLoading] = useState(true)
-  const [dialogAberto, setDialogAberto] = useState(false)
-  const [modoEdicao, setModoEdicao] = useState(false)
   const [dialogImportacao, setDialogImportacao] = useState(false)
   const [importando, setImportando] = useState(false)
-  const [resultadoImport, setResultadoImport] = useState<any>(null)
-  const [produtosBling, setProdutosBling] = useState<any[]>([])
+  const [resultadoImport, setResultadoImport] = useState<{ importados: number; atualizados: number; erros: number; detalhes: Array<{ sku: string; status: string; mensagem?: string }> } | null>(null)
+  const [produtosBling, setProdutosBling] = useState<Array<{ id: number; nome: string; codigo: string; formato?: string; estoque?: { saldoVirtualTotal: number } }>>([])
   const [carregandoProdutos, setCarregandoProdutos] = useState(false)
   const [produtosSelecionados, setProdutosSelecionados] = useState<Set<number>>(new Set()) // Para import Bling
   const [produtosTabelaSelecionados, setProdutosTabelaSelecionados] = useState<Set<number>>(new Set()) // Para tabela principal
-  const [integracoesBling, setIntegracoesBling] = useState<any[]>([])
+  const [integracoesBling, setIntegracoesBling] = useState<Array<{ id: number; nome?: string; accessToken?: string | null; canal: { slug: string } }>>([])
   const [integracaoSelecionada, setIntegracaoSelecionada] = useState<string>('')
   const [carregandoIntegracoes, setCarregandoIntegracoes] = useState(false)
   const [buscaBling, setBuscaBling] = useState('')
@@ -263,6 +261,7 @@ export default function ProdutosPage() {
 
   useEffect(() => {
     carregarProdutos()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -276,6 +275,7 @@ export default function ProdutosPage() {
       setIntegracaoSelecionada('')
       setBuscaBling('')
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dialogImportacao])
 
   const abrirDialogNovo = () => {
@@ -404,7 +404,7 @@ export default function ProdutosPage() {
       setCarregandoIntegracoes(true)
       const integracoesRes = await fetch('/api/usuarios/integracoes')
       const integracoes = await integracoesRes.json()
-      const blingIntegracoes = integracoes.filter((i: any) => i.canal.slug === 'erp-bling' && i.accessToken)
+      const blingIntegracoes = integracoes.filter((i: { canal: { slug: string }; accessToken?: string | null }) => i.canal.slug === 'erp-bling' && i.accessToken)
       
       setIntegracoesBling(blingIntegracoes)
       
@@ -1080,7 +1080,7 @@ export default function ProdutosPage() {
                     </div>
                   ) : (
                     <div className="max-h-96 overflow-y-auto">
-                      {paginationBling.paginatedItems.map((produto: any) => (
+                      {paginationBling.paginatedItems.map((produto: { id: number; nome: string; codigo: string; formato?: string; estoque?: { saldoVirtualTotal: number } }) => (
                         <div
                           key={produto.id}
                           className="p-3 border-b last:border-b-0 hover:bg-muted/50 flex items-center gap-3"
@@ -1147,7 +1147,7 @@ export default function ProdutosPage() {
                 
                 {resultadoImport.detalhes && resultadoImport.detalhes.length > 0 && (
                   <div className="max-h-48 overflow-y-auto text-xs space-y-1">
-                    {resultadoImport.detalhes.slice(0, 10).map((detalhe: any, idx: number) => (
+                    {resultadoImport.detalhes.slice(0, 10).map((detalhe: { sku: string; status: string; mensagem?: string }, idx: number) => (
                       <div key={idx} className="flex items-center gap-2">
                         {detalhe.status === 'importado' && <CheckCircle2 className="h-3 w-3 text-green-500" />}
                         {detalhe.status === 'atualizado' && <Download className="h-3 w-3 text-blue-500" />}

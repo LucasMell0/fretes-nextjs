@@ -87,6 +87,7 @@ export default function TransportadorasPage() {
 
   useEffect(() => {
     carregarTransportadoras()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const toggleSelecionado = (id: number) => {

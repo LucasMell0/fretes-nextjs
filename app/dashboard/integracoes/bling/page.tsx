@@ -23,7 +23,6 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Loader2, Download, CheckCircle2, XCircle, AlertCircle, Package, Plus, Trash2, RefreshCw } from 'lucide-react'
-import { Progress } from '@/components/ui/progress'
 
 interface ResultadoImportacao {
   importados: number
@@ -42,8 +41,8 @@ export default function BlingImportacaoPage() {
   const [limite, setLimite] = useState('100')
   const [loading, setLoading] = useState(false)
   const [loadingIntegracao, setLoadingIntegracao] = useState(true)
-  const [integracoesBling, setIntegracoesBling] = useState<any[]>([])
-  const [integracaoBling, setIntegracaoBling] = useState<any>(null)
+  const [integracoesBling, setIntegracoesBling] = useState<Array<{ id: number; accessToken?: string | null; tokenExpiresAt?: string | null; criadoEm?: string; canal: { slug: string } }>>([])
+  const [integracaoBling, setIntegracaoBling] = useState<{ id: number; accessToken?: string | null; tokenExpiresAt?: string | null; criadoEm?: string; canal: { slug: string } } | null>(null)
   const [resultado, setResultado] = useState<ResultadoImportacao | null>(null)
   const { toast } = useToast()
 
@@ -58,11 +57,11 @@ export default function BlingImportacaoPage() {
       if (response.ok) {
         const data = await response.json()
         // Buscar TODAS as integrações Bling (pode ter múltiplas contas)
-        const blings = data.filter((i: any) => i.canal.slug === 'erp-bling')
+        const blings = data.filter((i: { canal: { slug: string } }) => i.canal.slug === 'erp-bling')
         setIntegracoesBling(blings)
-        
+
         // Selecionar a primeira com OAuth como padrão
-        const blingComOAuth = blings.find((b: any) => b.accessToken)
+        const blingComOAuth = blings.find((b: { accessToken?: string | null }) => b.accessToken)
         setIntegracaoBling(blingComOAuth || blings[0] || null)
       }
     } catch (error) {
@@ -225,7 +224,7 @@ export default function BlingImportacaoPage() {
                         <p className="text-xs text-muted-foreground">
                           {integracao.accessToken && integracao.tokenExpiresAt
                             ? `Expira: ${new Date(integracao.tokenExpiresAt).toLocaleDateString()}`
-                            : 'Criada em: ' + new Date(integracao.criadoEm).toLocaleDateString()}
+                            : 'Criada em: ' + (integracao.criadoEm ? new Date(integracao.criadoEm).toLocaleDateString() : '-')}
                         </p>
                       </div>
                     </div>

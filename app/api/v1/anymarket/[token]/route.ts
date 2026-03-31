@@ -45,7 +45,7 @@ export async function POST(
   { params }: { params: { token: string } }
 ) {
   const inicio = Date.now()
-  let integracao: any = null
+  let integracao: { id: number; ativo: boolean; usuarioId: number; usuario: Record<string, unknown>; canal: Record<string, unknown> } | null = null
 
   try {
     // Rate limiting por token: 60 requisições por minuto
@@ -54,7 +54,7 @@ export async function POST(
       windowSeconds: 60,
       identifier: params.token // Rate limit por token específico
     })
-    
+
     if (rateLimitResponse) {
       logger.warn(`Rate limit excedido para token ${params.token}`)
       return rateLimitResponse
@@ -96,7 +96,7 @@ export async function POST(
     const marketplace = body.marketplace || 'Anymarket'
 
     // 4. Buscar produtos por SKU (FILTRADO por usuarioId para isolamento multi-tenant)
-    const skus = body.products.map((p: any) => p.sku)
+    const skus = body.products.map((p: { sku: string }) => p.sku)
     const produtos = await prisma.produto.findMany({
       where: {
         sku: { in: skus },
@@ -110,8 +110,8 @@ export async function POST(
 
     // Montar array de produtos para cotação
     const produtosParaCotar = body.products
-      .filter((p: any) => skuToId.has(p.sku))
-      .map((p: any) => ({
+      .filter((p: { sku: string; amount?: string }) => skuToId.has(p.sku))
+      .map((p: { sku: string; amount?: string }) => ({
         produto_id: skuToId.get(p.sku)!,
         quantidade: parseInt(p.amount || '1'),
       }))
@@ -137,7 +137,7 @@ export async function POST(
       cotacoes,
       'API',
       marketplace,
-      integracao.usuario_id
+      integracao.usuarioId
     )
 
     // 9. Salvar log da requisição
@@ -166,7 +166,7 @@ export async function POST(
 }
 
 // Validar entrada
-function validateInput(data: any): string | null {
+function validateInput(data: Record<string, unknown>): string | null {
   if (!data.zipCode) {
     return 'zipCode is required'
   }
@@ -186,7 +186,7 @@ function validateInput(data: any): string | null {
 }
 
 // Formatar resposta no padrão Anymarket
-function formatarResposta(cotacoes: any[]) {
+function formatarResposta(cotacoes: Array<{ transportadora_id: number; transportadora_nome: string; valor_frete: number; prazo_entrega: number; regiao_nome?: string }>) {
   if (!cotacoes || cotacoes.length === 0) {
     return { items: [] }
   }
@@ -199,7 +199,7 @@ function formatarResposta(cotacoes: any[]) {
     if (cot.valor_frete < maisBarato.valor_frete) {
       maisBarato = cot
     }
-    if (cot.prazo < maisRapido.prazo) {
+    if (cot.prazo_entrega < maisRapido.prazo_entrega) {
       maisRapido = cot
     }
   }
@@ -210,7 +210,7 @@ function formatarResposta(cotacoes: any[]) {
   items.push({
     serviceName: maisBarato.regiao_nome || 'Transporte Terrestre',
     carrierName: maisBarato.transportadora_nome,
-    deliveryTime: maisBarato.prazo,
+    deliveryTime: maisBarato.prazo_entrega,
     price: parseFloat(maisBarato.valor_frete.toFixed(2)),
     freightType: 'NORMAL',
   })
@@ -220,7 +220,7 @@ function formatarResposta(cotacoes: any[]) {
     items.push({
       serviceName: maisRapido.regiao_nome || 'Transporte Expresso',
       carrierName: maisRapido.transportadora_nome,
-      deliveryTime: maisRapido.prazo,
+      deliveryTime: maisRapido.prazo_entrega,
       price: parseFloat(maisRapido.valor_frete.toFixed(2)),
       freightType: 'EXPRESSA',
     })
@@ -234,7 +234,7 @@ async function salvarLog(
   integracaoId: number | null,
   request: NextRequest,
   statusCode: number,
-  responseBody: any,
+  responseBody: unknown,
   tempoMs: number
 ) {
   try {
@@ -250,7 +250,7 @@ async function salvarLog(
         headers: Object.fromEntries(request.headers),
         ipOrigem: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || null,
         statusCode,
-        responseBody,
+        responseBody: JSON.parse(JSON.stringify(responseBody)),
         tempoProcessamentoMs: tempoMs,
       },
     })

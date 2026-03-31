@@ -44,7 +44,7 @@ const chartConfig = {
 export const ChartCotacoesInteractive = React.memo(function ChartCotacoesInteractive({ data: initialData }: ChartCotacoesInteractiveProps) {
   const [timeRange, setTimeRange] = React.useState("7d")
   const [data, setData] = React.useState(initialData)
-  const [loading, setLoading] = React.useState(false)
+  const [, setLoading] = React.useState(false)
 
   // Buscar dados quando período mudar
   React.useEffect(() => {

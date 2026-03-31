@@ -1,22 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
 import { z } from 'zod'
 import { withAuth } from '@/lib/middleware/auth'
-import bcrypt from 'bcryptjs'
 
 const perfilSchema = z.object({
   nome: z.string().min(3, 'Nome deve ter no mínimo 3 caracteres'),
   email: z.string().email('E-mail inválido'),
-})
-
-const senhaSchema = z.object({
-  senhaAtual: z.string().min(1, 'Senha atual é obrigatória'),
-  novaSenha: z.string().min(6, 'Nova senha deve ter no mínimo 6 caracteres'),
-  confirmarSenha: z.string().min(1, 'Confirmação de senha é obrigatória'),
-}).refine((data) => data.novaSenha === data.confirmarSenha, {
-  message: 'As senhas não coincidem',
-  path: ['confirmarSenha'],
 })
 
 export const GET = withAuth(async (req, { userId }) => {

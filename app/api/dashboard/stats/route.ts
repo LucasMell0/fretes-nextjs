@@ -1,8 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
 import { withAuth } from '@/lib/middleware/auth'
-import { getSessionUserId } from '@/lib/utils/parse'
 
 // OTIMIZADO: Cache de 60 segundos para reduzir carga no banco
 export const revalidate = 60

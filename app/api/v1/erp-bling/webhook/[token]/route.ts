@@ -62,7 +62,7 @@ export async function POST(
   { params }: { params: { token: string } }
 ) {
   const inicio = Date.now()
-  let integracao: any = null
+  let integracao: { id: number; ativo: boolean; usuarioId: number; accessToken: string | null; refreshToken: string | null; tokenExpiresAt: Date | null; usuario: Record<string, unknown>; canal: { slug: string } & Record<string, unknown> } | null = null
 
   try {
     // Rate limiting por token: 100 requisições por minuto (webhooks podem ser frequentes)
@@ -189,7 +189,7 @@ async function salvarLog(
   integracaoId: number | null,
   request: NextRequest,
   statusCode: number,
-  responseBody: any,
+  responseBody: unknown,
   tempoMs: number
 ) {
   try {
@@ -207,7 +207,7 @@ async function salvarLog(
         headers: Object.fromEntries(request.headers),
         ipOrigem: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || null,
         statusCode,
-        responseBody,
+        responseBody: JSON.parse(JSON.stringify(responseBody)),
         tempoProcessamentoMs: tempoMs,
       },
     })

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
 import { withAuthTyped } from '@/lib/middleware/auth'
@@ -52,7 +52,7 @@ export const PATCH = withAuthTyped<RouteParams>(async (req, { userId }, params) 
 
     const body = await req.json()
 
-    const config: any = {}
+    const config: Record<string, string | Record<string, string>> = {}
 
     if (integracao.canal.slug === 'erp-bling') {
       // Validar API Key do Bling

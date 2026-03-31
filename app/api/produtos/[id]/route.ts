@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
 import { z } from 'zod'
@@ -25,7 +25,7 @@ export const GET = withAuthTyped<RouteParams>(async (req, { userId }, params) =>
   try {
     const produtoId = parseRouteId(params!.id)
 
-    const produto = await verifyOwnership<any>(
+    const produto = await verifyOwnership(
       prisma.produto,
       produtoId,
       userId,
@@ -88,8 +88,8 @@ export const PUT = withAuthTyped<RouteParams>(async (req, { userId }, params) =>
     })
 
     return NextResponse.json(updatedProduto)
-  } catch (error: any) {
-    if (error.code === 'P2002') {
+  } catch (error: unknown) {
+    if (error instanceof Error && (error as Error & { code?: string }).code === 'P2002') {
       return NextResponse.json(
         { erro: 'SKU já existe' },
         { status: 409 }

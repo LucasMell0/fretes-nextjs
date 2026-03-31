@@ -3,16 +3,19 @@
  * Evita duplicação do padrão de verificação em todas as rotas
  */
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type PrismaModelDelegate = { findFirst: (...args: any[]) => Promise<any>; findMany?: (...args: any[]) => Promise<any[]>; count?: (...args: any[]) => Promise<number> }
+
 /**
  * Verifica se um recurso pertence ao usuário
  * Retorna o recurso se pertencer, null caso contrário
- * 
+ *
  * @param model - Model do Prisma (ex: prisma.produto)
  * @param id - ID do recurso
  * @param usuarioId - ID do usuário
  * @param include - Opções de include (opcional)
  * @returns Recurso encontrado ou null
- * 
+ *
  * @example
  * const produto = await verifyOwnership(
  *   prisma.produto,
@@ -22,7 +25,7 @@
  * if (!produto) {
  *   return NextResponse.json({ erro: 'Não encontrado' }, { status: 404 })
  * }
- * 
+ *
  * @example Com include tipado:
  * const regiao = await verifyOwnership<TransportadoraRegiaoWithRelations>(
  *   prisma.transportadoraRegiao,
@@ -31,11 +34,11 @@
  *   { transportadora: true, precos: true }
  * )
  */
-export async function verifyOwnership<T = any>(
-  model: any,
+export async function verifyOwnership<T = unknown>(
+  model: PrismaModelDelegate,
   id: number,
   usuarioId: number,
-  include?: any
+  include?: Record<string, unknown>
 ): Promise<T | null> {
   return await model.findFirst({
     where: { id, usuarioId },
@@ -64,7 +67,7 @@ export async function verifyOwnership<T = any>(
  * // Não precisa verificar if (!produto) - já lança erro
  */
 export async function verifyOwnershipOrThrow<T>(
-  model: any,
+  model: PrismaModelDelegate,
   id: number,
   usuarioId: number,
   errorMessage: string = 'Recurso não encontrado ou sem permissão'
@@ -72,14 +75,14 @@ export async function verifyOwnershipOrThrow<T>(
   const resource = await model.findFirst({
     where: { id, usuarioId },
   })
-  
+
   if (!resource) {
-    const error: any = new Error(errorMessage)
+    const error = new Error(errorMessage) as Error & { status: number }
     error.status = 404
     throw error
   }
-  
-  return resource
+
+  return resource as T
 }
 
 /**
@@ -102,11 +105,11 @@ export async function verifyOwnershipOrThrow<T>(
  * }
  */
 export async function verifyMultipleOwnership<T>(
-  model: any,
+  model: PrismaModelDelegate,
   ids: number[],
   usuarioId: number
 ): Promise<T[]> {
-  return await model.findMany({
+  return await model.findMany!({
     where: {
       id: { in: ids },
       usuarioId,
@@ -135,11 +138,11 @@ export async function verifyMultipleOwnership<T>(
  * }
  */
 export async function hasOwnership(
-  model: any,
+  model: PrismaModelDelegate,
   id: number,
   usuarioId: number
 ): Promise<boolean> {
-  const count = await model.count({
+  const count = await model.count!({
     where: { id, usuarioId },
   })
   

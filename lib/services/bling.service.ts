@@ -477,7 +477,7 @@ export class BlingService {
   /**
    * Importar produto usando transação do Prisma (para uso em importações em lote)
    */
-  private async importarProdutoComTransacao(produtoBling: BlingProduto, usuarioId: number, tx: any) {
+  private async importarProdutoComTransacao(produtoBling: BlingProduto, usuarioId: number, tx: { produto: { upsert: (args: Record<string, unknown>) => Promise<unknown> } }) {
     // Se o produto tem variações (formato 'V'), buscar detalhes completos
     if (produtoBling.formato === 'V') {
       return await this.importarProdutoComVariacoesComTransacao(produtoBling, usuarioId, tx)
@@ -490,7 +490,7 @@ export class BlingService {
   /**
    * Importar produto simples ou variação individual com transação
    */
-  private async importarProdutoSimplesComTransacao(produtoBling: BlingProduto, usuarioId: number, tx: any, produtoPaiId?: number) {
+  private async importarProdutoSimplesComTransacao(produtoBling: BlingProduto, usuarioId: number, tx: { produto: { upsert: (args: Record<string, unknown>) => Promise<unknown> } }, produtoPaiId?: number) {
     const cubagem = produtoBling.dimensoes
       ? (produtoBling.dimensoes.largura / 100) *
         (produtoBling.dimensoes.altura / 100) *
@@ -518,7 +518,7 @@ export class BlingService {
   /**
    * Importar produto com variações usando transação
    */
-  private async importarProdutoComVariacoesComTransacao(produtoBling: BlingProduto, usuarioId: number, tx: any) {
+  private async importarProdutoComVariacoesComTransacao(produtoBling: BlingProduto, usuarioId: number, tx: { produto: { upsert: (args: Record<string, unknown>) => Promise<unknown> } }) {
     try {
       const response = await this.buscarProdutoPorId(produtoBling.id)
       const produtoCompleto = response.data
@@ -527,7 +527,7 @@ export class BlingService {
         return await this.importarProdutoSimplesComTransacao(produtoBling, usuarioId, tx)
       }
 
-      const produtoPai = await this.importarProdutoSimplesComTransacao(produtoCompleto, usuarioId, tx)
+      const produtoPai = await this.importarProdutoSimplesComTransacao(produtoCompleto, usuarioId, tx) as { id: number }
 
       if (produtoCompleto.variacoes && produtoCompleto.variacoes.length > 0) {
         for (const variacao of produtoCompleto.variacoes) {

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
 import { z } from 'zod'
@@ -78,8 +78,8 @@ export const POST = withAuth(async (req, { userId }) => {
     })
 
     return NextResponse.json(produto, { status: 201 })
-  } catch (error: any) {
-    if (error.code === 'P2002') {
+  } catch (error: unknown) {
+    if (error instanceof Error && (error as Error & { code?: string }).code === 'P2002') {
       return NextResponse.json(
         { erro: 'SKU já existe' },
         { status: 409 }

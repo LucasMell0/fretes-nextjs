@@ -27,48 +27,6 @@ interface Regiao {
   }
 }
 
-interface Taxas {
-  id: number
-  freteTipo: string
-  freteValor: number
-  freteMinimo: number
-  grisTipo: string
-  grisValor: number
-  grisMinimo: number
-  despachoTipo: string
-  despachoValor: number
-  despachoMinimo: number
-  pedagioValor: number
-  tasTipo: string
-  tasValor: number
-  tasMinimo: number
-  tdaAtivo: boolean
-  tdaTipo: string
-  tdaValor: number
-  tdaMinimo: number
-  tdeAtivo: boolean
-  tdeTipo: string
-  tdeValor: number
-  tdeMinimo: number
-  trfAtivo: boolean
-  trfTipo: string
-  trfValor: number
-  trfMinimo: number
-  seguroFluvialAtivo: boolean
-  seguroFluvialTipo: string
-  seguroFluvialValor: number
-  seguroFluvialMinimo: number
-  trtAtivo: boolean
-  trtTipo: string
-  trtValor: number
-  trtMinimo: number
-  suframaAtivo: boolean
-  suframaTipo: string
-  suframaValor: number
-  suframaMinimo: number
-  icms: number
-}
-
 // Componente TaxaCard movido para fora para evitar re-criação
 const TaxaCard = ({ 
   titulo, 
@@ -82,7 +40,9 @@ const TaxaCard = ({
   prefixo: string
   ativo?: boolean
   onAtivoChange?: (value: boolean) => void
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   formData: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   setFormData: (data: any) => void
 }) => {
   const tipoKey = `${prefixo}Tipo` as keyof typeof formData
@@ -202,6 +162,7 @@ export default function TaxasPage() {
 
   useEffect(() => {
     carregarDados()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [regiaoId])
 
   const carregarDados = async () => {

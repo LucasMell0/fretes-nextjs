@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
 import { withAuth } from '@/lib/middleware/auth'
@@ -79,7 +79,7 @@ export const GET = withAuth(async (req, { userId }) => {
 
         // Filtrar APENAS produtos PAI e SIMPLES
         // Excluir variações individuais (que possuem idProdutoPai)
-        const produtosPai = response.data.filter((p: any) => {
+        const produtosPai = response.data.filter((p: { idProdutoPai?: number }) => {
           // Se tem idProdutoPai, é uma variação (filho) - EXCLUIR
           // Se NÃO tem idProdutoPai, é produto pai ou simples - INCLUIR
           return !p.idProdutoPai

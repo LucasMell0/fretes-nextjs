@@ -1,9 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { randomBytes } from 'crypto'
 import { logger } from '@/lib/logger'
 import { withAuth } from '@/lib/middleware/auth'
-import type { IntegracaoWithConfig } from '@/lib/types/prisma-helpers'
 
 /**
  * API para iniciar fluxo OAuth2 do Bling
@@ -99,7 +98,7 @@ export const GET = withAuth(async (req, { userId }) => {
       where: { id: integracao.id },
       data: {
         config: {
-          ...((integracao.config as Record<string, any>) || {}),
+          ...((integracao.config as Record<string, unknown>) || {}),
           oauthState: state,
           oauthTimestamp: Date.now()
         }

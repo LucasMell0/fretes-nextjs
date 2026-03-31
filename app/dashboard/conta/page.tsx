@@ -43,6 +43,7 @@ export default function ContaPage() {
 
   useEffect(() => {
     carregarDados()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const carregarDados = async () => {

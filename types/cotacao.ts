@@ -90,9 +90,7 @@ export interface TaxasRegiao {
   despachoTipo: 'PERCENTUAL' | 'VALOR'
   despachoValor: number
   despachoMinimo: number
-  pedagioTipo: 'PERCENTUAL' | 'VALOR'
   pedagioValor: number
-  pedagioMinimo: number
   tasTipo: 'PERCENTUAL' | 'VALOR'
   tasValor: number
   tasMinimo: number

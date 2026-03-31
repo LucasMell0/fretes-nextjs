@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { cotacaoService } from '@/lib/services/cotacao.service'
 import { logger } from '@/lib/logger'
 import { z } from 'zod'

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
 import { z } from 'zod'
@@ -21,7 +21,7 @@ export const GET = withAuthTyped<RouteParams>(async (req, { userId }, params) =>
   try {
     const transportadoraId = parseRouteId(params!.id)
 
-    const transportadora = await verifyOwnership<any>(
+    const transportadora = await verifyOwnership(
       prisma.transportadora,
       transportadoraId,
       userId,

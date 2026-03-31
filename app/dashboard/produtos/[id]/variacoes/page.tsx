@@ -62,10 +62,9 @@ export default function VariacoesPage() {
   const [variacoes, setVariacoes] = useState<Variacao[]>([])
   const [loading, setLoading] = useState(true)
   const [editandoId, setEditandoId] = useState<number | null>(null)
-  const [editData, setEditData] = useState<any>({})
+  const [editData, setEditData] = useState<{ peso?: number; cubagem?: number; crossDocking?: number; estoque?: number }>({})
   
   // Gerador de variações
-  const [salvando, setSalvando] = useState(false)
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false)
   const [variacaoParaExcluir, setVariacaoParaExcluir] = useState<number | null>(null)
   const [skuBase, setSkuBase] = useState('')
@@ -76,6 +75,7 @@ export default function VariacoesPage() {
 
   useEffect(() => {
     carregarDados()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [produtoId])
 
   const carregarDados = async () => {
@@ -253,7 +253,7 @@ export default function VariacoesPage() {
   const salvarVariacao = async (id: number) => {
     try {
       // Filtrar valores inválidos (NaN, undefined, null) mas permitir 0
-      const dadosLimpos: any = {}
+      const dadosLimpos: { peso?: number; cubagem?: number; crossDocking?: number; estoque?: number } = {}
       
       if (typeof editData.peso === 'number' && !isNaN(editData.peso)) {
         dadosLimpos.peso = editData.peso

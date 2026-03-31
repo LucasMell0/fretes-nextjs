@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
 import { withAuthTyped } from '@/lib/middleware/auth'
@@ -12,7 +12,7 @@ interface RouteParams {
 
 export const DELETE = withAuthTyped<RouteParams>(async (req, { userId }, params) => {
   try {
-    const produtoId = parseRouteId(params!.id)
+    parseRouteId(params!.id) // validate produtoId
     const cubagemId = parseRouteId(params!.cubagemId)
 
     const cubagem = await verifyOwnership(

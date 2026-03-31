@@ -26,12 +26,6 @@ interface ProdutoDB {
   }
 }
 
-interface ProdutoSelecionado {
-  sku: string
-  quantidade: number
-  valor: number
-}
-
 interface ResultadoCotacao {
   transportadora_id: number
   transportadora_nome: string
@@ -70,6 +64,7 @@ export default function CotacaoPage() {
 
   useEffect(() => {
     carregarProdutos()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const carregarProdutos = async () => {
@@ -78,19 +73,19 @@ export default function CotacaoPage() {
       const data = await res.json()
       
       // Filtrar produtos ativos
-      const produtosAtivos = data.filter((p: any) => p.ativo)
-      
+      const produtosAtivos = data.filter((p: ProdutoDB & { produtoPaiId?: number | null }) => p.ativo)
+
       // Encontrar IDs de produtos pai que têm variações
       const produtosPaiComVariacoes = new Set(
         produtosAtivos
-          .filter((p: any) => p.produtoPaiId !== null)
-          .map((p: any) => p.produtoPaiId)
+          .filter((p: ProdutoDB & { produtoPaiId?: number | null }) => p.produtoPaiId !== null)
+          .map((p: ProdutoDB & { produtoPaiId?: number | null }) => p.produtoPaiId)
       )
-      
+
       // Exibir apenas:
       // 1. Produtos que SÃO variações (produtoPaiId !== null)
       // 2. Produtos pai que NÃO têm variações
-      const produtosFiltrados = produtosAtivos.filter((p: any) => {
+      const produtosFiltrados = produtosAtivos.filter((p: ProdutoDB & { produtoPaiId?: number | null }) => {
         // Se é variação, exibe
         if (p.produtoPaiId !== null) return true
         
