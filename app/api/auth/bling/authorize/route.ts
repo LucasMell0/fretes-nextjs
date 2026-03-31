@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server'
+
+export const dynamic = 'force-dynamic'
 import { prisma } from '@/lib/prisma'
 import { randomBytes } from 'crypto'
 import { logger } from '@/lib/logger'
