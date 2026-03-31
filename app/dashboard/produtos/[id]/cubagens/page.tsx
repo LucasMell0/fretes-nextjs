@@ -55,7 +55,7 @@ export default function CubagensPage() {
   const router = useRouter()
   const { toast } = useToast()
   
-  const produtoId = parseInt(params.id as string)
+  const produtoId = parseInt(params?.id as string)
   
   const [produto, setProduto] = useState<Produto | null>(null)
   const [cubagens, setCubagens] = useState<Cubagem[]>([])

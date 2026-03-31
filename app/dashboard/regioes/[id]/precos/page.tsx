@@ -51,7 +51,7 @@ export default function PrecosPage() {
   const router = useRouter()
   const { toast } = useToast()
   
-  const regiaoId = parseInt(params.id as string)
+  const regiaoId = parseInt(params?.id as string)
   
   const [regiao, setRegiao] = useState<Regiao | null>(null)
   const [precos, setPrecos] = useState<Preco[]>([])

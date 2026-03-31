@@ -56,7 +56,7 @@ export default function VariacoesPage() {
   const router = useRouter()
   const { toast } = useToast()
   
-  const produtoId = parseInt(params.id as string)
+  const produtoId = parseInt(params?.id as string)
   
   const [produtoPai, setProdutoPai] = useState<Produto | null>(null)
   const [variacoes, setVariacoes] = useState<Variacao[]>([])

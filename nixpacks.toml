@@ -1,0 +1,6 @@
+[variables]
+NODE_ENV = "production"
+NPM_CONFIG_PRODUCTION = "false"
+
+[phases.build]
+cmds = ["npm run build"]

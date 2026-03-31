@@ -113,7 +113,7 @@ export default function TaxasPage() {
   const router = useRouter()
   const { toast } = useToast()
   
-  const regiaoId = parseInt(params.id as string)
+  const regiaoId = parseInt(params?.id as string)
   
   const [regiao, setRegiao] = useState<Regiao | null>(null)
   const [loading, setLoading] = useState(true)

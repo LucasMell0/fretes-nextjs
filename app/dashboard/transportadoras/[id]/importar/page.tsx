@@ -8,7 +8,7 @@ import { UploadRegioes } from '@/components/importacao/upload-regioes'
 export default function ImportarRegioesPage() {
   const params = useParams()
   const router = useRouter()
-  const transportadoraId = parseInt(params.id as string)
+  const transportadoraId = parseInt(params?.id as string)
 
   return (
     <div className="container mx-auto p-4 sm:p-6">
