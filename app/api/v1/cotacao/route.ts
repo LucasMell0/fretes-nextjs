@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cotacaoService } from '@/lib/services/cotacao.service'
+import { prisma } from '@/lib/prisma'
 import { rateLimitMiddleware } from '@/lib/rate-limit'
 import { logger } from '@/lib/logger'
 import { z } from 'zod'
@@ -15,6 +16,7 @@ const cotacaoSchema = z.object({
   produtos: z.array(produtoSchema).min(1, 'Pelo menos um produto é necessário'),
   origem: z.string().optional().default('API'),
   marketplace: z.string().optional(),
+  token: z.string().min(1, 'Token de integração é obrigatório'),
 })
 
 export async function POST(request: NextRequest) {
@@ -24,16 +26,16 @@ export async function POST(request: NextRequest) {
       maxRequests: 20,
       windowSeconds: 60
     })
-    
+
     if (rateLimitResponse) {
       logger.warn('Rate limit excedido em /api/v1/cotacao')
       return rateLimitResponse
     }
 
     const body = await request.json()
-    
+
     const validation = cotacaoSchema.safeParse(body)
-    
+
     if (!validation.success) {
       return NextResponse.json(
         {
@@ -45,9 +47,25 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { cep, produtos, origem, marketplace } = validation.data
+    const { cep, produtos, origem, marketplace, token } = validation.data
 
-    const resultados = await cotacaoService.cotar(cep, produtos)
+    // Validar token e obter usuarioId para isolamento multi-tenant
+    const integracao = await prisma.usuarioIntegracaoCanal.findUnique({
+      where: { token },
+      select: { id: true, ativo: true, usuarioId: true },
+    })
+
+    if (!integracao || !integracao.ativo) {
+      return NextResponse.json(
+        {
+          sucesso: false,
+          mensagem: 'Token inválido ou integração inativa',
+        },
+        { status: 401 }
+      )
+    }
+
+    const resultados = await cotacaoService.cotar(cep, produtos, integracao.usuarioId)
 
     if (resultados.length === 0) {
       return NextResponse.json(
@@ -61,8 +79,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const ipOrigem = request.headers.get('x-forwarded-for') || 
-                     request.headers.get('x-real-ip') || 
+    const ipOrigem = request.headers.get('x-forwarded-for') ||
+                     request.headers.get('x-real-ip') ||
                      'unknown'
     const userAgent = request.headers.get('user-agent') || 'unknown'
 
@@ -72,7 +90,7 @@ export async function POST(request: NextRequest) {
       resultados,
       origem,
       marketplace,
-      undefined,
+      integracao.usuarioId,
       ipOrigem,
       userAgent
     )
@@ -88,12 +106,11 @@ export async function POST(request: NextRequest) {
     )
   } catch (error) {
     logger.error('Erro ao processar cotação:', error)
-    
+
     return NextResponse.json(
       {
         sucesso: false,
         mensagem: 'Erro ao processar cotação',
-        erro: error instanceof Error ? error.message : 'Erro desconhecido',
       },
       { status: 500 }
     )
@@ -109,6 +126,7 @@ export async function GET() {
       endpoint: '/api/v1/cotacao',
       documentacao: {
         body: {
+          token: 'string (token de integração obrigatório)',
           cep: 'string (formato: 00000-000)',
           produtos: [
             {

@@ -175,13 +175,19 @@ export async function POST(
     logger.error('Erro no webhook Bling:', error)
     
     return NextResponse.json(
-      { 
-        error: 'Internal server error',
-        message: error instanceof Error ? error.message : 'Unknown error'
-      },
+      { error: 'Internal server error' },
       { status: 500 }
     )
   }
+}
+
+// Filtrar headers sensíveis antes de salvar no banco
+const SAFE_HEADERS = ['content-type', 'content-length', 'user-agent', 'x-forwarded-for', 'x-real-ip', 'accept', 'origin', 'referer']
+
+function filterSafeHeaders(headers: Headers): Record<string, string> {
+  return Object.fromEntries(
+    [...headers.entries()].filter(([key]) => SAFE_HEADERS.includes(key.toLowerCase()))
+  )
 }
 
 // Salvar log da requisição
@@ -204,7 +210,7 @@ async function salvarLog(
         endpoint: request.nextUrl.pathname,
         queryParams: Object.fromEntries(request.nextUrl.searchParams),
         body,
-        headers: Object.fromEntries(request.headers),
+        headers: filterSafeHeaders(request.headers),
         ipOrigem: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || null,
         statusCode,
         responseBody: JSON.parse(JSON.stringify(responseBody)),

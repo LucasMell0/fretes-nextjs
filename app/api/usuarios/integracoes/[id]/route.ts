@@ -42,7 +42,16 @@ export const PATCH = withAuthTyped<RouteParams>(async (req, { userId }, params) 
         ...(config && { config }),
         ...(status && { status }),
       },
-      include: {
+      select: {
+        id: true,
+        canalId: true,
+        ativo: true,
+        status: true,
+        token: true,
+        ultimaRequisicao: true,
+        totalRequisicoes: true,
+        criadoEm: true,
+        atualizadoEm: true,
         canal: {
           select: {
             id: true,

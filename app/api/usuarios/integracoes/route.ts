@@ -11,7 +11,16 @@ export const GET = withAuth(async (req, { userId }) => {
   try {
     const integracoes = await prisma.usuarioIntegracaoCanal.findMany({
       where: { usuarioId: userId },
-      include: {
+      select: {
+        id: true,
+        canalId: true,
+        ativo: true,
+        status: true,
+        token: true,
+        ultimaRequisicao: true,
+        totalRequisicoes: true,
+        criadoEm: true,
+        atualizadoEm: true,
         canal: {
           select: {
             id: true,
