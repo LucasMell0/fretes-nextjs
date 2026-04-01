@@ -83,11 +83,18 @@ export const DELETE = withAuthTyped<RouteParams>(async (req, { userId }, params)
     const produtoPaiId = parseRouteId(params!.id)
     const variacaoId = parseRouteId(params!.variacaoId)
 
-    await verifyOwnership(
+    const produtoPai = await verifyOwnership(
       prisma.produto,
       produtoPaiId,
       userId
     )
+
+    if (!produtoPai) {
+      return NextResponse.json(
+        { erro: 'Produto pai não encontrado ou sem permissão' },
+        { status: 404 }
+      )
+    }
 
     // Verificar ownership da variação
     const variacao = await prisma.produto.findFirst({
