@@ -7,7 +7,11 @@ import { withAuth } from '@/lib/middleware/auth'
 
 const senhaSchema = z.object({
   senhaAtual: z.string().min(1, 'Senha atual é obrigatória'),
-  novaSenha: z.string().min(6, 'Nova senha deve ter no mínimo 6 caracteres'),
+  novaSenha: z.string()
+    .min(8, 'Nova senha deve ter no mínimo 8 caracteres')
+    .regex(/[a-z]/, 'Senha deve conter pelo menos uma letra minúscula')
+    .regex(/[A-Z]/, 'Senha deve conter pelo menos uma letra maiúscula')
+    .regex(/[0-9]/, 'Senha deve conter pelo menos um número'),
   confirmarSenha: z.string().min(1, 'Confirmação de senha é obrigatória'),
 }).refine((data) => data.novaSenha === data.confirmarSenha, {
   message: 'As senhas não coincidem',
@@ -56,7 +60,7 @@ export const PUT = withAuth(async (req, { userId }) => {
     }
 
     // Hash da nova senha
-    const novaSenhaHash = await bcrypt.hash(validation.data.novaSenha, 10)
+    const novaSenhaHash = await bcrypt.hash(validation.data.novaSenha, 12)
 
     // Atualizar senha
     await prisma.usuario.update({

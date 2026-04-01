@@ -4,13 +4,14 @@ import { logger } from '@/lib/logger'
 import { z } from 'zod'
 import { withAuth } from '@/lib/middleware/auth'
 import { verifyTransportadoraOwnership } from '@/lib/validators/relationship.validator'
+import { sanitizeTransform } from '@/lib/utils/sanitize'
 
 // OTIMIZADO: Cache de 30 segundos
 export const revalidate = 30
 
 const regiaoSchema = z.object({
   transportadoraId: z.number().int().positive(),
-  nome: z.string().min(3, 'Nome deve ter no mínimo 3 caracteres'),
+  nome: z.string().min(3, 'Nome deve ter no mínimo 3 caracteres').max(200).transform(sanitizeTransform),
   cepInicio: z.string().length(8, 'CEP deve ter 8 dígitos'),
   cepFim: z.string().length(8, 'CEP deve ter 8 dígitos'),
   prazoEntrega: z.number().int().min(0, 'Prazo não pode ser negativo'),

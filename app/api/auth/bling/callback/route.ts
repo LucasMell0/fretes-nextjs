@@ -4,21 +4,33 @@ export const dynamic = 'force-dynamic'
 import { prisma } from '@/lib/prisma'
 import { encrypt } from '@/lib/crypto'
 import { logger } from '@/lib/logger'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import crypto from 'crypto'
 
 /**
  * API para receber callback OAuth2 do Bling
- * 
+ *
  * Endpoint: GET /api/auth/bling/callback?code={authorization_code}&state={state}
- * 
+ *
  * Recebe authorization_code do Bling e troca por access_token
  */
 
 export async function GET(request: NextRequest) {
   try {
+    // 0. Verificar sessão do usuário
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.id) {
+      return NextResponse.redirect(
+        `${request.nextUrl.origin}/login?error=session_expired`
+      )
+    }
+    const sessionUserId = parseInt(session.user.id as string)
+
     // 1. Obter parâmetros do callback
     const code = request.nextUrl.searchParams.get('code')
     const stateParam = request.nextUrl.searchParams.get('state')
-    
+
     if (!code || !stateParam) {
       return NextResponse.redirect(
         `${request.nextUrl.origin}/dashboard/integracoes?error=missing_params`
@@ -49,9 +61,25 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // Verificar se a integração pertence ao usuário logado
+    if (integracao.usuarioId !== sessionUserId) {
+      return NextResponse.redirect(
+        `${request.nextUrl.origin}/dashboard/integracoes?error=unauthorized`
+      )
+    }
+
     const config = integracao.config as Record<string, unknown>
-    
-    if (!config?.oauthState || config.oauthState !== state) {
+
+    // Comparação constant-time do state para prevenir timing attacks
+    const stateValid = config?.oauthState &&
+      typeof config.oauthState === 'string' &&
+      state.length === config.oauthState.length &&
+      crypto.timingSafeEqual(
+        Buffer.from(state),
+        Buffer.from(config.oauthState as string)
+      )
+
+    if (!stateValid) {
       return NextResponse.redirect(
         `${request.nextUrl.origin}/dashboard/integracoes?error=invalid_state`
       )

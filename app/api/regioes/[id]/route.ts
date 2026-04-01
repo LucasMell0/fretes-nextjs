@@ -6,13 +6,14 @@ import { withAuthTyped } from '@/lib/middleware/auth'
 import { parseRouteId } from '@/lib/utils/parse'
 import { verifyOwnership } from '@/lib/utils/ownership'
 import { verifyTransportadoraOwnership } from '@/lib/validators/relationship.validator'
+import { sanitizeTransform } from '@/lib/utils/sanitize'
 
 interface RouteParams {
   id: string
 }
 
 const regiaoSchema = z.object({
-  nome: z.string().min(3).optional(),
+  nome: z.string().min(3).max(200).transform(sanitizeTransform).optional(),
   cepInicio: z.string().length(8).optional(),
   cepFim: z.string().length(8).optional(),
   transportadoraId: z.number().int().positive().optional(),

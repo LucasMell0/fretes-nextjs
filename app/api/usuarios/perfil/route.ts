@@ -3,10 +3,11 @@ import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
 import { z } from 'zod'
 import { withAuth } from '@/lib/middleware/auth'
+import { sanitizeTransform } from '@/lib/utils/sanitize'
 
 const perfilSchema = z.object({
-  nome: z.string().min(3, 'Nome deve ter no mínimo 3 caracteres'),
-  email: z.string().email('E-mail inválido'),
+  nome: z.string().min(3, 'Nome deve ter no mínimo 3 caracteres').max(100).transform(sanitizeTransform),
+  email: z.string().email('E-mail inválido').max(255),
 })
 
 export const GET = withAuth(async (req, { userId }) => {

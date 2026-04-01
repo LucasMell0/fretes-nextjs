@@ -4,8 +4,15 @@ import { logger } from '@/lib/logger'
 import { withAuthTyped } from '@/lib/middleware/auth'
 import { parseRouteId } from '@/lib/utils/parse'
 import { verifyOwnership } from '@/lib/utils/ownership'
+import { z } from 'zod'
 
 export const revalidate = 0
+
+const patchIntegracaoSchema = z.object({
+  ativo: z.boolean().optional(),
+  status: z.enum(['ativo', 'inativo', 'configurado', 'erro']).optional(),
+  config: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).optional(),
+}).strict()
 
 // Atualizar integração (toggle ativo, config, etc)
 interface RouteParams {
@@ -16,7 +23,16 @@ export const PATCH = withAuthTyped<RouteParams>(async (req, { userId }, params) 
   try {
     const integracaoId = parseRouteId(params!.id)
     const body = await req.json()
-    const { ativo, config, status } = body
+
+    const validation = patchIntegracaoSchema.safeParse(body)
+    if (!validation.success) {
+      return NextResponse.json(
+        { erro: 'Dados inválidos', detalhes: validation.error.errors },
+        { status: 400 }
+      )
+    }
+
+    const { ativo, config, status } = validation.data
 
     // Verificar se integração pertence ao usuário
     const integracaoExistente = await verifyOwnership(

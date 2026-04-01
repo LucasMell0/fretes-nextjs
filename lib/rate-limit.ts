@@ -67,11 +67,13 @@ export function checkRateLimit(
     identifier
   } = config
 
-  // Identificador: custom > IP > fallback
-  const key = identifier || 
-    request.headers.get('x-forwarded-for')?.split(',')[0] ||
+  // Identificador: custom > IP (apenas x-real-ip que deve ser setado pelo proxy) > fallback
+  // NOTA: x-forwarded-for é facilmente spoofável pelo cliente.
+  // x-real-ip deve ser setado pelo reverse proxy (nginx/Coolify) e é mais confiável.
+  const key = identifier ||
     request.headers.get('x-real-ip') ||
-    'unknown'
+    request.ip ||
+    'global-fallback'
 
   const now = Date.now()
   const windowMs = windowSeconds * 1000

@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
 import { withAuthTyped } from '@/lib/middleware/auth'
 import { parseRouteId } from '@/lib/utils/parse'
+import { encrypt } from '@/lib/crypto'
 
 /**
  * API para configurar integrações (salvar API Keys, credenciais OAuth, etc)
@@ -63,7 +64,7 @@ export const PATCH = withAuthTyped<RouteParams>(async (req, { userId }, params) 
         )
       }
 
-      config.apiKey = body.apiKey
+      config.apiKey = encrypt(body.apiKey)
       config.apiUrl = body.apiUrl || 'https://www.bling.com.br/Api/v3'
       
       // TODO: Validar API Key fazendo uma chamada de teste ao Bling
@@ -117,10 +118,7 @@ export const PATCH = withAuthTyped<RouteParams>(async (req, { userId }, params) 
     logger.error('Erro ao configurar integração:', error)
     
     return NextResponse.json(
-      { 
-        error: 'Erro ao configurar integração',
-        message: error instanceof Error ? error.message : 'Erro desconhecido'
-      },
+      { error: 'Erro ao configurar integração' },
       { status: 500 }
     )
   }
