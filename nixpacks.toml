@@ -3,4 +3,4 @@ NODE_ENV = "production"
 NPM_CONFIG_PRODUCTION = "false"
 
 [phases.build]
-cmds = ["rm -rf .next/cache node_modules/.cache", "npm run build"]
+cmds = ["rm -rf .next/cache/* node_modules/.cache/*", "npm run build"]
