@@ -113,10 +113,7 @@ export const GET = withAuth(async (req, { userId }) => {
     logger.error('Erro ao listar produtos do Bling:', error)
     
     return NextResponse.json(
-      { 
-        error: 'Erro ao listar produtos',
-        message: error instanceof Error ? error.message : 'Erro desconhecido'
-      },
+      { error: 'Erro ao listar produtos' },
       { status: 500 }
     )
   }

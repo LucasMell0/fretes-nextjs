@@ -120,10 +120,7 @@ export const GET = withAuth(async (req, { userId }) => {
     logger.error('Erro ao iniciar OAuth Bling:', error)
     
     return NextResponse.json(
-      { 
-        error: 'Erro ao iniciar autorização',
-        message: error instanceof Error ? error.message : 'Erro desconhecido'
-      },
+      { error: 'Erro ao iniciar autorização' },
       { status: 500 }
     )
   }

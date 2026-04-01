@@ -108,10 +108,7 @@ export const POST = withAuth(async (req, { userId }) => {
     logger.error('Erro ao importar produtos do Bling:', error)
     
     return NextResponse.json(
-      { 
-        error: 'Erro ao importar produtos',
-        message: error instanceof Error ? error.message : 'Erro desconhecido'
-      },
+      { error: 'Erro ao importar produtos' },
       { status: 500 }
     )
   }

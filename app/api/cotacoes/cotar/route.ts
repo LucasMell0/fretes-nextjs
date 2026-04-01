@@ -87,7 +87,6 @@ export const POST = withAuth(async (req, { userId }) => {
       {
         sucesso: false,
         mensagem: 'Erro ao processar cotação',
-        erro: error instanceof Error ? error.message : 'Erro desconhecido',
       },
       { status: 500 }
     )
