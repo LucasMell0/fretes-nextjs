@@ -372,12 +372,13 @@ export class CotacaoService {
   ): Promise<void> {
     const melhorCotacao = resultados[0]
 
-    // Buscar dados completos dos produtos
+    // Buscar dados completos dos produtos (filtrado por tenant)
     const produtosDB = await prisma.produto.findMany({
       where: {
         sku: {
           in: produtos.map(p => p.sku),
         },
+        ...(usuarioId ? { usuarioId } : {}),
       },
       select: {
         id: true,

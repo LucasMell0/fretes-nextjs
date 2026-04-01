@@ -120,6 +120,21 @@ export const DELETE = withAuthTyped<RouteParams>(async (req, { userId }, params)
       )
     }
 
+    // Verificar que o preço pertence à região do usuário (previne IDOR)
+    const preco = await prisma.transportadoraRegiaoPreco.findFirst({
+      where: {
+        id: precoId,
+        transportadoraRegiaoId: regiaoId,
+      },
+    })
+
+    if (!preco) {
+      return NextResponse.json(
+        { erro: 'Preço não encontrado nesta região' },
+        { status: 404 }
+      )
+    }
+
     await prisma.transportadoraRegiaoPreco.delete({
       where: { id: precoId },
     })

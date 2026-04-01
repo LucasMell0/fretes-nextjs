@@ -58,10 +58,16 @@ export const authOptions: NextAuthOptions = {
         token.tipo = user.tipo
       }
       
-      // Quando update() é chamado, atualizar o token com os novos dados
-      if (trigger === "update" && session) {
-        token.name = session.user.name
-        token.email = session.user.email
+      // Quando update() é chamado, re-buscar dados do banco (nunca confiar no client)
+      if (trigger === "update") {
+        const dbUser = await prisma.usuario.findUnique({
+          where: { id: parseInt(token.id as string) },
+          select: { nome: true, email: true },
+        })
+        if (dbUser) {
+          token.name = dbUser.nome
+          token.email = dbUser.email
+        }
       }
       
       return token

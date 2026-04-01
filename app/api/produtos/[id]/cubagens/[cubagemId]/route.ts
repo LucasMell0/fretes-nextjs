@@ -12,18 +12,34 @@ interface RouteParams {
 
 export const DELETE = withAuthTyped<RouteParams>(async (req, { userId }, params) => {
   try {
-    parseRouteId(params!.id) // validate produtoId
+    const produtoId = parseRouteId(params!.id)
     const cubagemId = parseRouteId(params!.cubagemId)
 
-    const cubagem = await verifyOwnership(
-      prisma.produtoTransportadoraCubagem,
-      cubagemId,
+    // Verificar ownership via produto pai (cubagem não tem usuarioId direto)
+    const produto = await verifyOwnership(
+      prisma.produto,
+      produtoId,
       userId
     )
 
+    if (!produto) {
+      return NextResponse.json(
+        { erro: 'Produto não encontrado ou sem permissão' },
+        { status: 404 }
+      )
+    }
+
+    // Verificar que cubagem pertence ao produto do usuário
+    const cubagem = await prisma.produtoTransportadoraCubagem.findFirst({
+      where: {
+        id: cubagemId,
+        produtoId: produtoId,
+      },
+    })
+
     if (!cubagem) {
       return NextResponse.json(
-        { erro: 'Cubagem não encontrada ou sem permissão' },
+        { erro: 'Cubagem não encontrada neste produto' },
         { status: 404 }
       )
     }
