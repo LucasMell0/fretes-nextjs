@@ -34,9 +34,10 @@ export class CotacaoService {
     usuarioId: number
   }): Promise<void> {
     try {
-      await prisma.auditoriaCotacao.create({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (prisma as any).auditoriaCotacao.create({
         data: {
-          tipo: params.tipo as unknown as string,
+          tipo: params.tipo,
           descricao: params.descricao,
           detalhes: params.detalhes ? JSON.parse(JSON.stringify(params.detalhes)) : null,
           cep: params.cep || null,
@@ -45,7 +46,7 @@ export class CotacaoService {
           marketplace: params.marketplace || null,
           integracaoId: params.integracaoId || null,
           usuarioId: params.usuarioId,
-          status: 'PENDENTE' as unknown as string,
+          status: 'PENDENTE',
         },
       })
     } catch (error) {
