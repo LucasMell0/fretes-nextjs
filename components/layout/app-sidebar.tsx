@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { useEffect, useState } from "react"
 import {
@@ -104,21 +105,34 @@ export function AppSidebar({ user }: AppSidebarProps) {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
-              <Link href="/dashboard">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                  <Truck className="size-4" />
-                </div>
-                <div className="flex flex-col gap-0.5 leading-none">
-                  <span className="font-semibold">Sistema Fretes</span>
-                  <span className="text-xs">Gestão de Cotações</span>
-                </div>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        <div className="flex items-center justify-center py-3 group-data-[collapsible=icon]:px-0 px-4">
+          <Link href="/dashboard">
+            <Image
+              src="/logos/ginte-white.png"
+              alt="Ginte"
+              width={110}
+              height={36}
+              className="hidden dark:block group-data-[collapsible=icon]:!hidden"
+              priority
+            />
+            <Image
+              src="/logos/ginte-dark.png"
+              alt="Ginte"
+              width={110}
+              height={36}
+              className="block dark:hidden group-data-[collapsible=icon]:!hidden"
+              priority
+            />
+            <Image
+              src="/icon.png"
+              alt="Ginte"
+              width={32}
+              height={32}
+              className="hidden group-data-[collapsible=icon]:!block"
+              priority
+            />
+          </Link>
+        </div>
       </SidebarHeader>
 
       <SidebarContent>
