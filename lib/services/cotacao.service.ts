@@ -36,16 +36,16 @@ export class CotacaoService {
     try {
       await prisma.auditoriaCotacao.create({
         data: {
-          tipo: params.tipo,
+          tipo: params.tipo as unknown as string,
           descricao: params.descricao,
-          detalhes: params.detalhes || undefined,
-          cep: params.cep,
+          detalhes: params.detalhes ? JSON.parse(JSON.stringify(params.detalhes)) : null,
+          cep: params.cep || null,
           skus: params.skus,
           origem: params.origem || 'API',
-          marketplace: params.marketplace,
-          integracaoId: params.integracaoId,
+          marketplace: params.marketplace || null,
+          integracaoId: params.integracaoId || null,
           usuarioId: params.usuarioId,
-          status: 'PENDENTE',
+          status: 'PENDENTE' as unknown as string,
         },
       })
     } catch (error) {
