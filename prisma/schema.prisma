@@ -23,6 +23,7 @@ model Usuario {
   regioes         TransportadoraRegiao[]   @relation("RegioesUsuario")
   transportadoras Transportadora[]         @relation("TransportadorasUsuario")
   integracoes     UsuarioIntegracaoCanal[]
+  auditorias      AuditoriaCotacao[]
 
   @@index([ativo])
   @@index([email, ativo])
@@ -278,6 +279,7 @@ model UsuarioIntegracaoCanal {
   scopes           String?         @map("scopes")
   tokenExpiresAt   DateTime?       @map("token_expires_at")
   logs             IntegracaoLog[]
+  auditorias       AuditoriaCotacao[]
   canal            CanalIntegracao @relation(fields: [canalId], references: [id], onDelete: Cascade)
   usuario          Usuario         @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
 
@@ -307,6 +309,44 @@ model IntegracaoLog {
   @@index([criadoEm])
   @@index([statusCode])
   @@map("integracao_logs")
+}
+
+model AuditoriaCotacao {
+  id            Int                     @id @default(autoincrement())
+  tipo          TipoFalhaCotacao
+  descricao     String                  @db.VarChar(500)
+  detalhes      Json?
+  cep           String?                 @db.VarChar(9)
+  skus          String[]
+  origem        String                  @default("API") @db.VarChar(20)
+  marketplace   String?                 @db.VarChar(100)
+  integracaoId  Int?                    @map("integracao_id")
+  usuarioId     Int                     @map("usuario_id")
+  status        StatusAuditoria         @default(PENDENTE)
+  criadoEm      DateTime               @default(now()) @map("criado_em")
+  resolvidoEm   DateTime?              @map("resolvido_em")
+  integracao    UsuarioIntegracaoCanal? @relation(fields: [integracaoId], references: [id], onDelete: SetNull)
+  usuario       Usuario                 @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId, status])
+  @@index([tipo])
+  @@index([criadoEm])
+  @@index([status])
+  @@map("auditoria_cotacoes")
+}
+
+enum TipoFalhaCotacao {
+  SKU_NAO_ENCONTRADO    @map("sku_nao_encontrado")
+  CEP_NAO_ATENDIDO      @map("cep_nao_atendido")
+
+  @@map("tipo_falha_cotacao")
+}
+
+enum StatusAuditoria {
+  PENDENTE  @map("pendente")
+  RESOLVIDO @map("resolvido")
+
+  @@map("status_auditoria")
 }
 
 enum TipoUsuario {

@@ -18,6 +18,7 @@ import {
   ChevronsUpDown,
   CreditCard,
   Plug,
+  ShieldAlert,
 } from "lucide-react"
 import { useTheme } from "next-themes"
 import { signOut } from "next-auth/react"
@@ -74,6 +75,11 @@ const menuItems = [
     title: "Integrações",
     href: "/dashboard/integracoes",
     icon: Plug,
+  },
+  {
+    title: "Auditoria",
+    href: "/dashboard/auditoria",
+    icon: ShieldAlert,
   },
   {
     title: "Relatórios",

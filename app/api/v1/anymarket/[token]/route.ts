@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { CotacaoService } from '@/lib/services/cotacao.service'
+import { CotacaoService, CotacaoError } from '@/lib/services/cotacao.service'
 import { rateLimitMiddleware } from '@/lib/rate-limit'
 import { logger } from '@/lib/logger'
 
@@ -46,6 +46,7 @@ export async function POST(
 ) {
   const inicio = Date.now()
   let integracao: { id: number; ativo: boolean; usuarioId: number; usuario: Record<string, unknown>; canal: Record<string, unknown> } | null = null
+  const cotacaoService = new CotacaoService()
 
   try {
     // Rate limiting por token: 60 requisições por minuto
@@ -95,36 +96,15 @@ export async function POST(
     const cep = body.zipCode.replace(/\D/g, '')
     const marketplace = body.marketplace || 'Anymarket'
 
-    // 4. Buscar produtos por SKU (FILTRADO por usuarioId para isolamento multi-tenant)
-    const skus = body.products.map((p: { sku: string }) => p.sku)
-    const produtos = await prisma.produto.findMany({
-      where: {
-        sku: { in: skus },
-        ativo: true,
-        usuarioId: integracao.usuarioId,
-      },
-    })
+    // 4. Montar array de produtos para cotação usando SKU
+    const produtosParaCotar = body.products.map((p: { sku: string; amount?: string; value?: number }) => ({
+      sku: p.sku,
+      quantidade: parseInt(p.amount || '1'),
+      valor: p.value || 0,
+    }))
 
-    // Mapear SKU -> ID
-    const skuToId = new Map(produtos.map(p => [p.sku, p.id]))
-
-    // Montar array de produtos para cotação
-    const produtosParaCotar = body.products
-      .filter((p: { sku: string; amount?: string }) => skuToId.has(p.sku))
-      .map((p: { sku: string; amount?: string }) => ({
-        produto_id: skuToId.get(p.sku)!,
-        quantidade: parseInt(p.amount || '1'),
-      }))
-
-    // 5. Se não encontrou produtos, retornar vazio
-    if (produtosParaCotar.length === 0) {
-      const response = { items: [] }
-      await salvarLog(integracao.id, request, 200, response, Date.now() - inicio)
-      return NextResponse.json(response)
-    }
-
-    // 6. Realizar cotação (com isolamento multi-tenant)
-    const cotacaoService = new CotacaoService()
+    // 5. Realizar cotação (com isolamento multi-tenant)
+    // Agora o service valida SKUs e CEP, lançando CotacaoError se algo faltar
     const cotacoes = await cotacaoService.cotar(cep, produtosParaCotar, integracao.usuarioId)
 
     // 7. Formatar resposta no padrão Anymarket
@@ -156,8 +136,31 @@ export async function POST(
     return NextResponse.json(response)
 
   } catch (error) {
+    if (error instanceof CotacaoError && integracao) {
+      const body = await request.clone().json().catch(() => ({}))
+      const skus = (body.products || []).map((p: { sku: string }) => p.sku)
+
+      await cotacaoService.registrarAuditoria({
+        tipo: error.tipo,
+        descricao: error.message,
+        detalhes: error.detalhes,
+        cep: body.zipCode?.replace(/\D/g, ''),
+        skus,
+        origem: 'API',
+        marketplace: body.marketplace || 'Anymarket',
+        integracaoId: integracao.id,
+        usuarioId: integracao.usuarioId,
+      })
+
+      const tempoProcessamento = Date.now() - inicio
+      await salvarLog(integracao.id, request, 400, { error: error.message, tipo: error.tipo }, tempoProcessamento)
+
+      // Anymarket espera { items: [] } quando não há cotação
+      return NextResponse.json({ items: [], error: error.message })
+    }
+
     logger.error('Erro no endpoint Anymarket:', error)
-    
+
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

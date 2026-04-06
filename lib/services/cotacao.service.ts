@@ -6,21 +6,84 @@ import type {
   TaxaAplicada,
 } from '@/types/cotacao'
 
+export class CotacaoError extends Error {
+  public tipo: 'SKU_NAO_ENCONTRADO' | 'CEP_NAO_ATENDIDO'
+  public detalhes: Record<string, unknown>
+
+  constructor(tipo: 'SKU_NAO_ENCONTRADO' | 'CEP_NAO_ATENDIDO', message: string, detalhes: Record<string, unknown> = {}) {
+    super(message)
+    this.tipo = tipo
+    this.detalhes = detalhes
+    this.name = 'CotacaoError'
+  }
+}
+
 export class CotacaoService {
+  /**
+   * Registra falha de cotação na tabela de auditoria
+   */
+  async registrarAuditoria(params: {
+    tipo: 'SKU_NAO_ENCONTRADO' | 'CEP_NAO_ATENDIDO'
+    descricao: string
+    detalhes?: Record<string, unknown>
+    cep?: string
+    skus: string[]
+    origem?: string
+    marketplace?: string
+    integracaoId?: number
+    usuarioId: number
+  }): Promise<void> {
+    try {
+      await prisma.auditoriaCotacao.create({
+        data: {
+          tipo: params.tipo,
+          descricao: params.descricao,
+          detalhes: params.detalhes || undefined,
+          cep: params.cep,
+          skus: params.skus,
+          origem: params.origem || 'API',
+          marketplace: params.marketplace,
+          integracaoId: params.integracaoId,
+          usuarioId: params.usuarioId,
+          status: 'PENDENTE',
+        },
+      })
+    } catch (error) {
+      logger.error('Erro ao registrar auditoria:', error)
+    }
+  }
+
   /**
    * Realiza cotação de frete para um CEP e lista de produtos
    */
   async cotar(cep: string, produtos: ProdutoCotacao[], usuarioId?: number): Promise<ResultadoCotacao[]> {
     const cepLimpo = cep.replace(/\D/g, '')
-    
+
     const regioes = await this.buscarTransportadorasPorCep(cepLimpo, usuarioId)
-    
+
     if (regioes.length === 0) {
-      return []
+      throw new CotacaoError(
+        'CEP_NAO_ATENDIDO',
+        `Nenhuma transportadora encontrada para o CEP ${cep}`,
+        { cep: cepLimpo }
+      )
     }
 
+    // Validar se todos os SKUs existem no banco
     const produtosCompletos = await this.buscarDadosProdutos(produtos, usuarioId)
-    
+    const skusEncontrados = produtosCompletos.map(p => p.sku)
+    const skusNaoEncontrados = produtos
+      .map(p => p.sku)
+      .filter(sku => !skusEncontrados.includes(sku))
+
+    if (skusNaoEncontrados.length > 0) {
+      throw new CotacaoError(
+        'SKU_NAO_ENCONTRADO',
+        `Produtos não encontrados: ${skusNaoEncontrados.join(', ')}`,
+        { skus_nao_encontrados: skusNaoEncontrados }
+      )
+    }
+
     // OTIMIZADO: Calcular todas as cotações em paralelo
     const cotacoesPromises = regioes.map(async (regiao) => {
       try {

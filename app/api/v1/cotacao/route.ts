@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { cotacaoService } from '@/lib/services/cotacao.service'
+import { cotacaoService, CotacaoError } from '@/lib/services/cotacao.service'
 import { prisma } from '@/lib/prisma'
 import { rateLimitMiddleware } from '@/lib/rate-limit'
 import { logger } from '@/lib/logger'
@@ -20,18 +20,21 @@ const cotacaoSchema = z.object({
 })
 
 export async function POST(request: NextRequest) {
+  // Rate limiting: 20 requisições por minuto
+  const rateLimitResponse = rateLimitMiddleware(request, {
+    maxRequests: 20,
+    windowSeconds: 60
+  })
+
+  if (rateLimitResponse) {
+    logger.warn('Rate limit excedido em /api/v1/cotacao')
+    return rateLimitResponse
+  }
+
+  let dadosValidados: z.infer<typeof cotacaoSchema> | null = null
+  let integracao: { id: number; ativo: boolean; usuarioId: number } | null = null
+
   try {
-    // Rate limiting: 20 requisições por minuto
-    const rateLimitResponse = rateLimitMiddleware(request, {
-      maxRequests: 20,
-      windowSeconds: 60
-    })
-
-    if (rateLimitResponse) {
-      logger.warn('Rate limit excedido em /api/v1/cotacao')
-      return rateLimitResponse
-    }
-
     const body = await request.json()
 
     const validation = cotacaoSchema.safeParse(body)
@@ -47,10 +50,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { cep, produtos, origem, marketplace, token } = validation.data
+    dadosValidados = validation.data
+    const { cep, produtos, origem, marketplace, token } = dadosValidados
 
     // Validar token e obter usuarioId para isolamento multi-tenant
-    const integracao = await prisma.usuarioIntegracaoCanal.findUnique({
+    integracao = await prisma.usuarioIntegracaoCanal.findUnique({
       where: { token },
       select: { id: true, ativo: true, usuarioId: true },
     })
@@ -66,18 +70,6 @@ export async function POST(request: NextRequest) {
     }
 
     const resultados = await cotacaoService.cotar(cep, produtos, integracao.usuarioId)
-
-    if (resultados.length === 0) {
-      return NextResponse.json(
-        {
-          sucesso: false,
-          mensagem: 'Nenhuma transportadora encontrada para este CEP',
-          cotacoes: [],
-          total_transportadoras: 0,
-        },
-        { status: 404 }
-      )
-    }
 
     const ipOrigem = request.headers.get('x-forwarded-for') ||
                      request.headers.get('x-real-ip') ||
@@ -105,6 +97,31 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     )
   } catch (error) {
+    if (error instanceof CotacaoError && dadosValidados && integracao) {
+      await cotacaoService.registrarAuditoria({
+        tipo: error.tipo,
+        descricao: error.message,
+        detalhes: error.detalhes,
+        cep: dadosValidados.cep.replace(/\D/g, ''),
+        skus: dadosValidados.produtos.map(p => p.sku),
+        origem: dadosValidados.origem,
+        marketplace: dadosValidados.marketplace,
+        integracaoId: integracao.id,
+        usuarioId: integracao.usuarioId,
+      })
+
+      const status = error.tipo === 'CEP_NAO_ATENDIDO' ? 404 : 400
+      return NextResponse.json(
+        {
+          sucesso: false,
+          mensagem: error.message,
+          tipo_erro: error.tipo,
+          detalhes: error.detalhes,
+        },
+        { status }
+      )
+    }
+
     logger.error('Erro ao processar cotação:', error)
 
     return NextResponse.json(
