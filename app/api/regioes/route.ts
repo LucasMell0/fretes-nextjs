@@ -14,7 +14,6 @@ const regiaoSchema = z.object({
   nome: z.string().min(3, 'Nome deve ter no mínimo 3 caracteres').max(200).transform(sanitizeTransform),
   cepInicio: z.string().length(8, 'CEP deve ter 8 dígitos'),
   cepFim: z.string().length(8, 'CEP deve ter 8 dígitos'),
-  prazoEntrega: z.number().int().min(0, 'Prazo não pode ser negativo'),
   ativo: z.boolean().optional().default(true),
 })
 
