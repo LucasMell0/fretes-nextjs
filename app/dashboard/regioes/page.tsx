@@ -149,9 +149,7 @@ export default function RegioesPage() {
   }
 
   const limparCep = (valor: string) => {
-    const numeros = valor.replace(/\D/g, '')
-    if (numeros.length <= 5) return numeros
-    return `${numeros.slice(0, 5)}-${numeros.slice(5, 8)}`
+    return valor.replace(/\D/g, '').slice(0, 8)
   }
 
   const toggleSelecionado = (id: number) => {
