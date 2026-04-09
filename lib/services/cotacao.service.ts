@@ -60,7 +60,11 @@ export class CotacaoService {
   async cotar(cep: string, produtos: ProdutoCotacao[], usuarioId?: number): Promise<{ cotacoes: ResultadoCotacao[]; erros: string[] }> {
     const cepLimpo = cep.replace(/\D/g, '')
 
-    const regioes = await this.buscarTransportadorasPorCep(cepLimpo, usuarioId)
+    // Buscar regiões e produtos em PARALELO (2 queries independentes)
+    const [regioes, produtosCompletos] = await Promise.all([
+      this.buscarTransportadorasPorCep(cepLimpo, usuarioId),
+      this.buscarDadosProdutos(produtos, usuarioId),
+    ])
 
     if (regioes.length === 0) {
       throw new CotacaoError(
@@ -69,9 +73,6 @@ export class CotacaoService {
         { cep: cepLimpo }
       )
     }
-
-    // Validar se todos os SKUs existem no banco
-    const produtosCompletos = await this.buscarDadosProdutos(produtos, usuarioId)
     const skusEncontrados = produtosCompletos.map(p => p.sku)
     const skusNaoEncontrados = produtos
       .map(p => p.sku)
@@ -146,7 +147,14 @@ export class CotacaoService {
     return await prisma.transportadoraRegiao.findMany({
       where: whereClause,
       include: {
-        transportadora: true,
+        transportadora: {
+          select: {
+            id: true,
+            nome: true,
+            fatorCubagem: true,
+            margemLucro: true,
+          },
+        },
         precos: {
           orderBy: {
             pesoInicial: 'asc',

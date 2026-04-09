@@ -39,6 +39,6 @@ export const config = {
     "/transportadoras/:path*",
     "/cotacoes/:path*",
     "/regioes/:path*",
-    "/api/:path*",
+    "/api/((?!v1/|canais|auth).*)",
   ],
 }

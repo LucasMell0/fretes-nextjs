@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { CotacaoService, CotacaoError } from '@/lib/services/cotacao.service'
+import { cotacaoService, CotacaoError } from '@/lib/services/cotacao.service'
 import { rateLimitMiddleware } from '@/lib/rate-limit'
 import { logger } from '@/lib/logger'
 
@@ -45,8 +45,7 @@ export async function POST(
   { params }: { params: { token: string } }
 ) {
   const inicio = Date.now()
-  let integracao: { id: number; ativo: boolean; usuarioId: number; usuario: Record<string, unknown>; canal: Record<string, unknown> } | null = null
-  const cotacaoService = new CotacaoService()
+  let integracao: { id: number; ativo: boolean; usuarioId: number } | null = null
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let requestBody: any = null
 
@@ -65,13 +64,10 @@ export async function POST(
 
     const { token } = params
 
-    // 1. Validar token e obter integração
+    // 1. Validar token e obter integração (select mínimo para performance)
     integracao = await prisma.usuarioIntegracaoCanal.findUnique({
       where: { token },
-      include: {
-        usuario: true,
-        canal: true,
-      },
+      select: { id: true, ativo: true, usuarioId: true },
     })
 
     if (!integracao || !integracao.ativo) {
@@ -131,7 +127,9 @@ export async function POST(
       }),
     ]).catch(err => logger.error('Erro ao salvar logs:', err))
 
-    return NextResponse.json(response)
+    return NextResponse.json(response, {
+      headers: { 'X-Response-Time': `${tempoTotal}ms` },
+    })
 
   } catch (error) {
     if (error instanceof CotacaoError && integracao) {
