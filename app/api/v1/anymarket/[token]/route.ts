@@ -47,6 +47,8 @@ export async function POST(
   const inicio = Date.now()
   let integracao: { id: number; ativo: boolean; usuarioId: number; usuario: Record<string, unknown>; canal: Record<string, unknown> } | null = null
   const cotacaoService = new CotacaoService()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let requestBody: any = null
 
   try {
     // Rate limiting por token: 60 requisições por minuto
@@ -82,10 +84,11 @@ export async function POST(
 
     // 2. Parse e validar input
     const body = await request.json()
+    requestBody = body
     const validationError = validateInput(body)
     
     if (validationError) {
-      await salvarLog(integracao.id, request, 400, validationError, Date.now() - inicio)
+      await salvarLog(integracao.id, request, 400, validationError, Date.now() - inicio, body)
       return NextResponse.json(
         { error: validationError },
         { status: 400 }
@@ -118,7 +121,7 @@ export async function POST(
         cep, produtosParaCotar, cotacoes, 'API', marketplace,
         integracao.usuarioId, undefined, undefined, tempoTotal, erros
       ),
-      salvarLog(integracao.id, request, 200, response, tempoTotal),
+      salvarLog(integracao.id, request, 200, response, tempoTotal, body),
       prisma.usuarioIntegracaoCanal.update({
         where: { id: integracao.id },
         data: {
@@ -132,23 +135,22 @@ export async function POST(
 
   } catch (error) {
     if (error instanceof CotacaoError && integracao) {
-      const body = await request.clone().json().catch(() => ({}))
-      const skus = (body.products || []).map((p: { sku: string }) => p.sku)
+      const skus = (requestBody?.products || []).map((p: { sku: string }) => p.sku)
 
       await cotacaoService.registrarAuditoria({
         tipo: error.tipo,
         descricao: error.message,
         detalhes: error.detalhes,
-        cep: body.zipCode?.replace(/\D/g, ''),
+        cep: requestBody?.zipCode?.replace(/\D/g, '') || '',
         skus,
         origem: 'API',
-        marketplace: body.marketplace || 'Anymarket',
+        marketplace: requestBody?.marketplace || 'Anymarket',
         integracaoId: integracao.id,
         usuarioId: integracao.usuarioId,
       })
 
       const tempoProcessamento = Date.now() - inicio
-      await salvarLog(integracao.id, request, 400, { error: error.message, tipo: error.tipo }, tempoProcessamento)
+      await salvarLog(integracao.id, request, 400, { error: error.message, tipo: error.tipo }, tempoProcessamento, requestBody)
 
       // Anymarket espera { items: [] } quando não há cotação
       return NextResponse.json({ items: [], error: error.message })
@@ -242,7 +244,8 @@ async function salvarLog(
   request: NextRequest,
   statusCode: number,
   responseBody: unknown,
-  tempoMs: number
+  tempoMs: number,
+  parsedBody?: unknown
 ) {
   try {
     if (!integracaoId) return
@@ -253,7 +256,7 @@ async function salvarLog(
         metodo: 'POST',
         endpoint: request.nextUrl.pathname,
         queryParams: Object.fromEntries(request.nextUrl.searchParams),
-        body: await request.clone().json().catch(() => null),
+        body: parsedBody ? JSON.parse(JSON.stringify(parsedBody)) : null,
         headers: filterSafeHeaders(request.headers),
         ipOrigem: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || null,
         statusCode,
