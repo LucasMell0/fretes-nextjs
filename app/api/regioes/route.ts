@@ -73,6 +73,23 @@ export const POST = withAuth(async (req, { userId }) => {
       )
     }
 
+    // Verificar sobreposição de faixa de CEP na mesma transportadora
+    const sobreposicao = await prisma.transportadoraRegiao.findFirst({
+      where: {
+        transportadoraId: validation.data.transportadoraId,
+        usuarioId: userId,
+        cepInicio: { lte: validation.data.cepFim },
+        cepFim: { gte: validation.data.cepInicio },
+      },
+    })
+
+    if (sobreposicao) {
+      return NextResponse.json(
+        { erro: `Faixa de CEP sobreposta com a região "${sobreposicao.nome}" (${sobreposicao.cepInicio} - ${sobreposicao.cepFim}) da mesma transportadora` },
+        { status: 409 }
+      )
+    }
+
     const regiao = await prisma.transportadoraRegiao.create({
       data: {
         ...validation.data,
