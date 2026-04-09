@@ -118,7 +118,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
               alt="Ginte"
               width={110}
               height={36}
-              className="hidden dark:block group-data-[collapsible=icon]:!hidden w-auto h-auto"
+              className="hidden dark:block group-data-[collapsible=icon]:!hidden max-w-[110px] h-auto"
               priority
             />
             <Image
@@ -126,7 +126,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
               alt="Ginte"
               width={110}
               height={36}
-              className="block dark:hidden group-data-[collapsible=icon]:!hidden w-auto h-auto"
+              className="block dark:hidden group-data-[collapsible=icon]:!hidden max-w-[110px] h-auto"
               priority
             />
             <Image

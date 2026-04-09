@@ -13,7 +13,8 @@ interface RouteParams {
 
 const cubagemSchema = z.object({
   transportadoraId: z.number().int().positive(),
-  cubagem: z.number().min(0),
+  cubagem: z.number().min(0).nullable().optional(),
+  peso: z.number().min(0).nullable().optional(),
 })
 
 export const GET = withAuthTyped<RouteParams>(async (req, { userId }, params) => {
@@ -103,7 +104,14 @@ export const POST = withAuthTyped<RouteParams>(async (req, { userId }, params) =
       )
     }
 
-    const { transportadoraId, cubagem } = validation.data
+    const { transportadoraId, cubagem, peso } = validation.data
+
+    if (cubagem == null && peso == null) {
+      return NextResponse.json(
+        { erro: 'Informe pelo menos cubagem ou peso' },
+        { status: 400 }
+      )
+    }
 
     // Verificar se transportadora pertence ao usuário
     const transportadoraValida = await verifyTransportadoraOwnership(
@@ -118,6 +126,10 @@ export const POST = withAuthTyped<RouteParams>(async (req, { userId }, params) =
       )
     }
 
+    const dados: Record<string, unknown> = {}
+    if (cubagem != null) dados.cubagem = cubagem
+    if (peso != null) dados.peso = peso
+
     // Verificar se já existe
     const existente = await prisma.produtoTransportadoraCubagem.findFirst({
       where: {
@@ -130,7 +142,7 @@ export const POST = withAuthTyped<RouteParams>(async (req, { userId }, params) =
       // Atualizar
       const cubagemAtualizada = await prisma.produtoTransportadoraCubagem.update({
         where: { id: existente.id },
-        data: { cubagem },
+        data: dados,
         include: {
           transportadora: true,
         },
@@ -142,7 +154,7 @@ export const POST = withAuthTyped<RouteParams>(async (req, { userId }, params) =
         data: {
           produtoId,
           transportadoraId,
-          cubagem,
+          ...dados,
         },
         include: {
           transportadora: true,

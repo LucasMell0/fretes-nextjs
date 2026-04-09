@@ -134,5 +134,6 @@ export interface ProdutoDB {
 export interface CubagemProduto {
   id: number
   transportadoraId: number
-  cubagem: number
+  cubagem: number | null
+  peso: number | null
 }

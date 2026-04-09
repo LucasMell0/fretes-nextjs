@@ -39,7 +39,8 @@ interface Transportadora {
 
 interface Cubagem {
   id: number
-  cubagem: number
+  cubagem: number | null
+  peso: number | null
   transportadora: Transportadora
 }
 
@@ -48,6 +49,7 @@ interface Produto {
   nome: string
   sku: string
   cubagem: number
+  peso: number
 }
 
 export default function CubagensPage() {
@@ -67,7 +69,8 @@ export default function CubagensPage() {
   
   const [formData, setFormData] = useState({
     transportadoraId: 0,
-    cubagem: 0,
+    cubagem: null as number | null,
+    peso: null as number | null,
   })
 
   useEffect(() => {
@@ -105,7 +108,8 @@ export default function CubagensPage() {
   const abrirDialogNovo = () => {
     setFormData({
       transportadoraId: transportadoras.length > 0 ? transportadoras[0].id : 0,
-      cubagem: produto?.cubagem || 0,
+      cubagem: null,
+      peso: null,
     })
     setDialogOpen(true)
   }
@@ -200,7 +204,7 @@ export default function CubagensPage() {
     <div className="p-6">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h2 className="text-3xl font-bold">Cubagens por Transportadora</h2>
+          <h2 className="text-3xl font-bold">Peso e Cubagem por Transportadora</h2>
           <p className="text-muted-foreground mt-1">{produto.nome}</p>
         </div>
         <Button variant="outline" onClick={() => router.push('/dashboard/produtos')}>
@@ -215,10 +219,14 @@ export default function CubagensPage() {
           <h3 className="font-semibold text-sm">Produto</h3>
         </div>
         <div className="p-4">
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
               <p className="text-xs text-muted-foreground mb-1">SKU</p>
               <p className="font-mono font-semibold">{produto.sku}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Peso Padrão</p>
+              <p className="font-semibold">{Number(produto.peso).toFixed(4)} kg</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground mb-1">Cubagem Padrão</p>
@@ -232,14 +240,14 @@ export default function CubagensPage() {
       <Card className="mb-6">
         <div className="p-4 border-b bg-muted/50 flex items-center justify-between">
           <div>
-            <h3 className="font-semibold">Cubagens Específicas</h3>
+            <h3 className="font-semibold">Configurações Específicas</h3>
             <p className="text-sm text-muted-foreground mt-0.5">
-              {cubagens.length} {cubagens.length === 1 ? 'transportadora' : 'transportadoras'} com cubagem customizada
+              {cubagens.length} {cubagens.length === 1 ? 'transportadora' : 'transportadoras'} com peso/cubagem customizado
             </p>
           </div>
           <Button onClick={abrirDialogNovo} disabled={transportadorasDisponiveis.length === 0}>
             <Plus className="mr-2 h-4 w-4" />
-            Adicionar Cubagem
+            Adicionar Configuração
           </Button>
         </div>
         {cubagens.length > 0 ? (
@@ -247,6 +255,7 @@ export default function CubagensPage() {
             <TableHeader>
               <TableRow className="hover:bg-transparent">
                 <TableHead className="font-semibold">Transportadora</TableHead>
+                <TableHead className="font-semibold">Peso (kg)</TableHead>
                 <TableHead className="font-semibold">Cubagem (m³)</TableHead>
                 <TableHead className="text-right font-semibold">Ações</TableHead>
               </TableRow>
@@ -256,7 +265,18 @@ export default function CubagensPage() {
                 <TableRow key={c.id}>
                   <TableCell className="font-medium">{c.transportadora.nome}</TableCell>
                   <TableCell>
-                    <span className="font-mono font-semibold">{Number(c.cubagem).toFixed(6)}</span>
+                    {c.peso != null ? (
+                      <span className="font-mono font-semibold">{Number(c.peso).toFixed(4)}</span>
+                    ) : (
+                      <span className="text-muted-foreground text-sm">Padrão</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {c.cubagem != null ? (
+                      <span className="font-mono font-semibold">{Number(c.cubagem).toFixed(6)}</span>
+                    ) : (
+                      <span className="text-muted-foreground text-sm">Padrão</span>
+                    )}
                   </TableCell>
                   <TableCell className="text-right">
                     <Button size="sm" variant="ghost" onClick={() => iniciarExclusao(c.id)} title="Excluir">
@@ -270,8 +290,8 @@ export default function CubagensPage() {
         ) : (
           <div className="p-8 text-center text-muted-foreground">
             <Package className="h-12 w-12 mx-auto mb-3 opacity-20" />
-            <p>Nenhuma cubagem específica cadastrada</p>
-            <p className="text-sm mt-1">O produto usará a cubagem padrão para todas transportadoras</p>
+            <p>Nenhuma configuração específica cadastrada</p>
+            <p className="text-sm mt-1">O produto usará o peso e cubagem padrão para todas transportadoras</p>
           </div>
         )}
       </Card>
@@ -280,7 +300,7 @@ export default function CubagensPage() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Adicionar Cubagem Específica</DialogTitle>
+            <DialogTitle>Adicionar Peso e Cubagem Específicos</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
@@ -300,13 +320,28 @@ export default function CubagensPage() {
               </Select>
             </div>
             <div>
+              <Label htmlFor="peso">Peso (kg)</Label>
+              <Input
+                id="peso"
+                type="number"
+                step="0.0001"
+                placeholder="Deixe vazio para usar o padrão"
+                value={formData.peso ?? ''}
+                onChange={(e) => setFormData({ ...formData, peso: e.target.value ? parseFloat(e.target.value) : null })}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Peso padrão: {Number(produto.peso).toFixed(4)} kg
+              </p>
+            </div>
+            <div>
               <Label htmlFor="cubagem">Cubagem (m³)</Label>
               <Input
                 id="cubagem"
                 type="number"
                 step="0.000001"
-                value={formData.cubagem}
-                onChange={(e) => setFormData({ ...formData, cubagem: parseFloat(e.target.value) || 0 })}
+                placeholder="Deixe vazio para usar o padrão"
+                value={formData.cubagem ?? ''}
+                onChange={(e) => setFormData({ ...formData, cubagem: e.target.value ? parseFloat(e.target.value) : null })}
               />
               <p className="text-xs text-muted-foreground mt-1">
                 Cubagem padrão: {Number(produto.cubagem).toFixed(6)} m³

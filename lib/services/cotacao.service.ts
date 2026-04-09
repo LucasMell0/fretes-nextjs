@@ -199,13 +199,15 @@ export class CotacaoService {
       const usarDadosPai = produto.produtoPai && (produto.produtoPai as unknown as { usarDadosPaiParaVariacoes: boolean }).usarDadosPaiParaVariacoes
       const produtoReferencia = usarDadosPai && produto.produtoPai ? produto.produtoPai : produto
       
-      const cubagemEspecifica = produtoReferencia.cubagens.find(c => c.transportadoraId === regiao.transportadoraId)
-      
-      const cubagemM3 = cubagemEspecifica 
-        ? Number(cubagemEspecifica.cubagem) 
+      const configEspecifica = produtoReferencia.cubagens.find(c => c.transportadoraId === regiao.transportadoraId)
+
+      const cubagemM3 = configEspecifica?.cubagem != null
+        ? Number(configEspecifica.cubagem)
         : Number(produtoReferencia.cubagem)
-      
-      const pesoRealUnitario = Number(produtoReferencia.peso)
+
+      const pesoRealUnitario = configEspecifica?.peso != null
+        ? Number(configEspecifica.peso)
+        : Number(produtoReferencia.peso)
       const pesoCubadoUnitario = this.calcularPesoCubado(fatorCubagem, cubagemM3)
       
       pesoReal += pesoRealUnitario * quantidade
