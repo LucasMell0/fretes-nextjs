@@ -27,7 +27,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useToast } from '@/components/ui/use-toast'
-import { ArrowLeft, Loader2, Activity, CheckCircle2, XCircle, Eye, Search } from 'lucide-react'
+import { ArrowLeft, Loader2, Activity, CheckCircle2, XCircle, Eye, Search, Clock, Zap } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
 interface Produto {
@@ -58,6 +58,7 @@ interface LogRequisicao {
   dataCotacao: string
   ipOrigem: string | null
   userAgent: string | null
+  tempoMs: number | null
   produtos: Produto[]
   resultados: Resultado[]
   erros: string[]
@@ -137,6 +138,11 @@ export default function LogsRequisicaoPage() {
 
   const totalSucesso = data?.logs.filter(l => l.totalTransportadoras > 0).length || 0
   const totalFalha = data?.logs.filter(l => l.totalTransportadoras === 0).length || 0
+  const logsComTempo = data?.logs.filter(l => l.tempoMs != null) || []
+  const tempoMedio = logsComTempo.length > 0
+    ? Math.round(logsComTempo.reduce((acc, l) => acc + (l.tempoMs || 0), 0) / logsComTempo.length)
+    : null
+  const logsLentos = logsComTempo.filter(l => (l.tempoMs || 0) > 250).length
 
   if (loading && !data) {
     return (
@@ -160,7 +166,7 @@ export default function LogsRequisicaoPage() {
       </div>
 
       {/* Cards de resumo */}
-      <div className="grid gap-6 md:grid-cols-3 mb-6">
+      <div className="grid gap-6 md:grid-cols-4 mb-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total de Requisições</CardTitle>
@@ -188,6 +194,25 @@ export default function LogsRequisicaoPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-500">{totalFalha}</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Tempo Médio</CardTitle>
+            <Zap className={`h-4 w-4 ${tempoMedio && tempoMedio <= 250 ? 'text-emerald-500' : 'text-yellow-500'}`} />
+          </CardHeader>
+          <CardContent>
+            <div className={`text-2xl font-bold font-mono ${
+              tempoMedio == null ? 'text-muted-foreground' :
+              tempoMedio <= 250 ? 'text-emerald-500' :
+              tempoMedio <= 500 ? 'text-yellow-500' : 'text-red-500'
+            }`}>
+              {tempoMedio != null ? `${tempoMedio}ms` : '-'}
+            </div>
+            {logsLentos > 0 && (
+              <p className="text-xs text-red-400 mt-1">{logsLentos} acima de 250ms</p>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -237,13 +262,14 @@ export default function LogsRequisicaoPage() {
                 <TableHead>Resultado</TableHead>
                 <TableHead>Melhor Frete</TableHead>
                 <TableHead>Prazo</TableHead>
+                <TableHead>Tempo</TableHead>
                 <TableHead className="text-right">Detalhes</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {data?.logs.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                     Nenhuma requisição encontrada
                   </TableCell>
                 </TableRow>
@@ -294,6 +320,24 @@ export default function LogsRequisicaoPage() {
                     </TableCell>
                     <TableCell className="text-sm">
                       {log.melhorPrazo ? `${log.melhorPrazo} dias` : '-'}
+                    </TableCell>
+                    <TableCell>
+                      {log.tempoMs != null ? (
+                        <Badge
+                          variant="outline"
+                          className={`text-xs font-mono ${
+                            log.tempoMs <= 250
+                              ? 'border-emerald-500 text-emerald-500'
+                              : log.tempoMs <= 500
+                                ? 'border-yellow-500 text-yellow-500'
+                                : 'border-red-500 text-red-500'
+                          }`}
+                        >
+                          {log.tempoMs}ms
+                        </Badge>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">-</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-right">
                       <Button
@@ -364,6 +408,25 @@ export default function LogsRequisicaoPage() {
                 <div>
                   <p className="text-xs text-muted-foreground">Marketplace</p>
                   <p className="text-sm font-medium">{logSelecionado.marketplace || '-'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Tempo de Resposta</p>
+                  {logSelecionado.tempoMs != null ? (
+                    <Badge
+                      variant="outline"
+                      className={`font-mono ${
+                        logSelecionado.tempoMs <= 250
+                          ? 'border-emerald-500 text-emerald-500'
+                          : logSelecionado.tempoMs <= 500
+                            ? 'border-yellow-500 text-yellow-500'
+                            : 'border-red-500 text-red-500'
+                      }`}
+                    >
+                      {logSelecionado.tempoMs}ms
+                    </Badge>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">-</p>
+                  )}
                 </div>
                 {logSelecionado.ipOrigem && (
                   <div>

@@ -213,6 +213,7 @@ model CotacaoLog {
   totalTransportadoras   Int                 @default(0) @map("total_transportadoras")
   ipOrigem               String?             @map("ip_origem") @db.VarChar(45)
   userAgent              String?             @map("user_agent")
+  tempoMs                Int?                @map("tempo_ms")
   usuarioId              Int?                @map("usuario_id")
   dataCotacao            DateTime            @default(now()) @map("data_cotacao")
   transportadora         Transportadora?     @relation(fields: [melhorTransportadoraId], references: [id])

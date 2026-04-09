@@ -34,6 +34,8 @@ export async function POST(request: NextRequest) {
   let dadosValidados: z.infer<typeof cotacaoSchema> | null = null
   let integracao: { id: number; ativo: boolean; usuarioId: number } | null = null
 
+  const inicio = Date.now()
+
   try {
     const body = await request.json()
 
@@ -76,6 +78,8 @@ export async function POST(request: NextRequest) {
                      'unknown'
     const userAgent = request.headers.get('user-agent') || 'unknown'
 
+    const tempoMs = Date.now() - inicio
+
     await cotacaoService.salvarLogCotacao(
       cep,
       produtos,
@@ -84,7 +88,8 @@ export async function POST(request: NextRequest) {
       marketplace,
       integracao.usuarioId,
       ipOrigem,
-      userAgent
+      userAgent,
+      tempoMs
     )
 
     return NextResponse.json(

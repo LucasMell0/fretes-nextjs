@@ -23,6 +23,8 @@ const cotacaoSchema = z.object({
 export const POST = withAuth(async (req, { userId }) => {
   let dadosValidados: z.infer<typeof cotacaoSchema> | null = null
 
+  const inicio = Date.now()
+
   try {
     const body = await req.json()
 
@@ -49,6 +51,7 @@ export const POST = withAuth(async (req, { userId }) => {
                      req.headers.get('x-real-ip') ||
                      'unknown'
     const userAgent = req.headers.get('user-agent') || 'unknown'
+    const tempoMs = Date.now() - inicio
 
     // 2. Salvar log COM usuarioId (IMPORTANTE!)
     await cotacaoService.salvarLogCotacao(
@@ -56,10 +59,11 @@ export const POST = withAuth(async (req, { userId }) => {
       produtos,
       resultados,
       origem,
-      undefined, // marketplace
-      userId,    // ✅ PASSA userId aqui!
+      undefined,
+      userId,
       ipOrigem,
-      userAgent
+      userAgent,
+      tempoMs
     )
 
     return NextResponse.json(

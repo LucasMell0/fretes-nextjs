@@ -111,13 +111,17 @@ export async function POST(
     const response = formatarResposta(cotacoes)
 
     // 8. Salvar log da cotação
+    const tempoTotal = Date.now() - inicio
     await cotacaoService.salvarLogCotacao(
       cep,
       produtosParaCotar,
       cotacoes,
       'API',
       marketplace,
-      integracao.usuarioId
+      integracao.usuarioId,
+      undefined,
+      undefined,
+      tempoTotal
     )
 
     // 9. Salvar log da requisição

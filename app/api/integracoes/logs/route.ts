@@ -73,6 +73,7 @@ export const GET = withAuth(async (req, { userId }) => {
         dataCotacao: log.dataCotacao,
         ipOrigem: log.ipOrigem,
         userAgent: log.userAgent,
+        tempoMs: log.tempoMs,
         produtos: log.produtos.map(p => ({
           sku: p.produtoSku,
           nome: p.produtoNome,

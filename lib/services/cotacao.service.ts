@@ -485,7 +485,8 @@ export class CotacaoService {
     marketplace?: string,
     usuarioId?: number,
     ipOrigem?: string,
-    userAgent?: string
+    userAgent?: string,
+    tempoMs?: number
   ): Promise<void> {
     const melhorCotacao = resultados[0]
 
@@ -524,6 +525,7 @@ export class CotacaoService {
         totalTransportadoras: resultados.length,
         ipOrigem,
         userAgent,
+        tempoMs,
         usuarioId,
         produtos: {
           create: produtos
