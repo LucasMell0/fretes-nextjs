@@ -19,6 +19,7 @@ import {
   CreditCard,
   Plug,
   ShieldAlert,
+  Activity,
 } from "lucide-react"
 import { useTheme } from "next-themes"
 import { signOut } from "next-auth/react"
@@ -75,6 +76,11 @@ const menuItems = [
     title: "Integrações",
     href: "/dashboard/integracoes",
     icon: Plug,
+  },
+  {
+    title: "Requisições",
+    href: "/dashboard/integracoes/logs",
+    icon: Activity,
   },
   {
     title: "Auditoria",
