@@ -86,11 +86,13 @@ export class CotacaoService {
     }
 
     // OTIMIZADO: Calcular todas as cotações em paralelo
+    const errosPorTransportadora: string[] = []
     const cotacoesPromises = regioes.map(async (regiao) => {
       try {
         return await this.calcularCotacao(regiao, produtosCompletos)
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error)
+        errosPorTransportadora.push(`${regiao.transportadora.nome}: ${msg}`)
         logger.error(`Erro ao calcular cotação para transportadora ${regiao.transportadora.nome}: ${msg}`)
         return null
       }
@@ -98,6 +100,20 @@ export class CotacaoService {
 
     const resultados = await Promise.all(cotacoesPromises)
     const cotacoes = resultados.filter((c): c is ResultadoCotacao => c !== null)
+
+    // Se TODAS as cotações falharam, registrar na auditoria
+    if (cotacoes.length === 0 && errosPorTransportadora.length > 0 && usuarioId) {
+      const skus = produtos.map(p => p.sku)
+      await this.registrarAuditoria({
+        tipo: 'CEP_NAO_ATENDIDO',
+        descricao: `Cotação falhou para todas as ${errosPorTransportadora.length} transportadora(s) do CEP ${cepLimpo}`,
+        detalhes: { erros: errosPorTransportadora, cep: cepLimpo, skus },
+        cep: cepLimpo,
+        skus,
+        origem: 'API',
+        usuarioId,
+      })
+    }
 
     return cotacoes.sort((a, b) => a.valor_frete - b.valor_frete)
   }
@@ -220,17 +236,24 @@ export class CotacaoService {
 
       // Prioridade peso: config filho > config pai > peso filho (se > 0 ou flag desligada) > peso pai
       let pesoRealUnitario: number
+      let fontePeso = ''
       if (configFilho?.peso != null) {
         pesoRealUnitario = Number(configFilho.peso)
+        fontePeso = 'config_filho'
       } else if (configPai?.peso != null) {
         pesoRealUnitario = Number(configPai.peso)
+        fontePeso = 'config_pai'
       } else if (Number(produto.peso) > 0 || !usarDadosPadraosPai) {
         pesoRealUnitario = Number(produto.peso)
+        fontePeso = 'padrao_filho'
       } else {
         pesoRealUnitario = Number(pai!.peso)
+        fontePeso = 'padrao_pai'
       }
       const pesoCubadoUnitario = this.calcularPesoCubado(fatorCubagem, cubagemM3)
-      
+
+      logger.info(`[Cotação] SKU=${produto.sku} transp=${regiao.transportadora.nome} | peso=${pesoRealUnitario}(${fontePeso}) cubagem=${cubagemM3} pesoCubado=${pesoCubadoUnitario} | temPai=${!!pai} configFilho=${!!configFilho} configPai=${!!configPai}`)
+
       pesoReal += pesoRealUnitario * quantidade
       pesoCubado += pesoCubadoUnitario * quantidade
       valorVendaTotal += valorVenda * quantidade
