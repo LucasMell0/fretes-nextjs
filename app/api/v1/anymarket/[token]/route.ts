@@ -104,38 +104,29 @@ export async function POST(
     }))
 
     // 5. Realizar cotação (com isolamento multi-tenant)
-    // Agora o service valida SKUs e CEP, lançando CotacaoError se algo faltar
-    const cotacoes = await cotacaoService.cotar(cep, produtosParaCotar, integracao.usuarioId)
+    const { cotacoes, erros } = await cotacaoService.cotar(cep, produtosParaCotar, integracao.usuarioId)
 
-    // 7. Formatar resposta no padrão Anymarket
+    // 6. Formatar resposta no padrão Anymarket
     const response = formatarResposta(cotacoes)
 
-    // 8. Salvar log da cotação
+    // 7. Medir tempo de resposta
     const tempoTotal = Date.now() - inicio
-    await cotacaoService.salvarLogCotacao(
-      cep,
-      produtosParaCotar,
-      cotacoes,
-      'API',
-      marketplace,
-      integracao.usuarioId,
-      undefined,
-      undefined,
-      tempoTotal
-    )
 
-    // 9. Salvar log da requisição
-    const tempoProcessamento = Date.now() - inicio
-    await salvarLog(integracao.id, request, 200, response, tempoProcessamento)
-
-    // 10. Atualizar estatísticas da integração
-    await prisma.usuarioIntegracaoCanal.update({
-      where: { id: integracao.id },
-      data: {
-        ultimaRequisicao: new Date(),
-        totalRequisicoes: { increment: 1 },
-      },
-    })
+    // 8. Salvar logs em background (não bloqueia a resposta)
+    Promise.all([
+      cotacaoService.salvarLogCotacao(
+        cep, produtosParaCotar, cotacoes, 'API', marketplace,
+        integracao.usuarioId, undefined, undefined, tempoTotal, erros
+      ),
+      salvarLog(integracao.id, request, 200, response, tempoTotal),
+      prisma.usuarioIntegracaoCanal.update({
+        where: { id: integracao.id },
+        data: {
+          ultimaRequisicao: new Date(),
+          totalRequisicoes: { increment: 1 },
+        },
+      }),
+    ]).catch(err => logger.error('Erro ao salvar logs:', err))
 
     return NextResponse.json(response)
 

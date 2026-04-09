@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const resultados = await cotacaoService.cotar(cep, produtos, integracao.usuarioId)
+    const { cotacoes: resultados, erros } = await cotacaoService.cotar(cep, produtos, integracao.usuarioId)
 
     const ipOrigem = request.headers.get('x-forwarded-for') ||
                      request.headers.get('x-real-ip') ||
@@ -80,17 +80,11 @@ export async function POST(request: NextRequest) {
 
     const tempoMs = Date.now() - inicio
 
-    await cotacaoService.salvarLogCotacao(
-      cep,
-      produtos,
-      resultados,
-      origem,
-      marketplace,
-      integracao.usuarioId,
-      ipOrigem,
-      userAgent,
-      tempoMs
-    )
+    // Salvar log em background (não bloqueia a resposta)
+    cotacaoService.salvarLogCotacao(
+      cep, produtos, resultados, origem, marketplace,
+      integracao.usuarioId, ipOrigem, userAgent, tempoMs, erros
+    ).catch(err => logger.error('Erro ao salvar log:', err))
 
     return NextResponse.json(
       {

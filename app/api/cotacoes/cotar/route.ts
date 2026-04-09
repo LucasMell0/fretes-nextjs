@@ -45,7 +45,7 @@ export const POST = withAuth(async (req, { userId }) => {
     const { cep, produtos, origem } = dadosValidados
 
     // 1. Realizar cotação COM filtro de usuário (apenas suas transportadoras/produtos)
-    const resultados = await cotacaoService.cotar(cep, produtos, userId)
+    const { cotacoes: resultados, erros } = await cotacaoService.cotar(cep, produtos, userId)
 
     const ipOrigem = req.headers.get('x-forwarded-for') ||
                      req.headers.get('x-real-ip') ||
@@ -53,18 +53,11 @@ export const POST = withAuth(async (req, { userId }) => {
     const userAgent = req.headers.get('user-agent') || 'unknown'
     const tempoMs = Date.now() - inicio
 
-    // 2. Salvar log COM usuarioId (IMPORTANTE!)
-    await cotacaoService.salvarLogCotacao(
-      cep,
-      produtos,
-      resultados,
-      origem,
-      undefined,
-      userId,
-      ipOrigem,
-      userAgent,
-      tempoMs
-    )
+    // 2. Salvar log em background (não bloqueia a resposta)
+    cotacaoService.salvarLogCotacao(
+      cep, produtos, resultados, origem, undefined,
+      userId, ipOrigem, userAgent, tempoMs, erros
+    ).catch(err => logger.error('Erro ao salvar log:', err))
 
     return NextResponse.json(
       {

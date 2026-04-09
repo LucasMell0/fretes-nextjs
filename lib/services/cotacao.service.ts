@@ -57,7 +57,7 @@ export class CotacaoService {
   /**
    * Realiza cotação de frete para um CEP e lista de produtos
    */
-  async cotar(cep: string, produtos: ProdutoCotacao[], usuarioId?: number): Promise<ResultadoCotacao[]> {
+  async cotar(cep: string, produtos: ProdutoCotacao[], usuarioId?: number): Promise<{ cotacoes: ResultadoCotacao[]; erros: string[] }> {
     const cepLimpo = cep.replace(/\D/g, '')
 
     const regioes = await this.buscarTransportadorasPorCep(cepLimpo, usuarioId)
@@ -115,15 +115,11 @@ export class CotacaoService {
       })
     }
 
-    // Guardar erros para log
-    this._ultimosErros = errosPorTransportadora
-
-    return cotacoes.sort((a, b) => a.valor_frete - b.valor_frete)
+    return {
+      cotacoes: cotacoes.sort((a, b) => a.valor_frete - b.valor_frete),
+      erros: errosPorTransportadora,
+    }
   }
-
-  /** Erros da última cotação (para log) */
-  private _ultimosErros: string[] = []
-  get ultimosErros(): string[] { return this._ultimosErros }
 
   /**
    * Busca transportadoras que atendem o CEP informado
@@ -486,7 +482,8 @@ export class CotacaoService {
     usuarioId?: number,
     ipOrigem?: string,
     userAgent?: string,
-    tempoMs?: number
+    tempoMs?: number,
+    erros?: string[]
   ): Promise<void> {
     const melhorCotacao = resultados[0]
 
@@ -517,7 +514,7 @@ export class CotacaoService {
         produtosJson: JSON.stringify(produtos),
         resultadoJson: JSON.stringify({
           cotacoes: resultados,
-          _erros: this._ultimosErros,
+          _erros: erros || [],
         }),
         melhorTransportadoraId: melhorCotacao?.transportadora_id,
         melhorValor: melhorCotacao?.valor_frete,
