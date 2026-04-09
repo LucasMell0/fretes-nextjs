@@ -90,7 +90,8 @@ export class CotacaoService {
       try {
         return await this.calcularCotacao(regiao, produtosCompletos)
       } catch (error) {
-        logger.error(`Erro ao calcular cotação para transportadora ${regiao.transportadora.nome}:`, error)
+        const msg = error instanceof Error ? error.message : String(error)
+        logger.error(`Erro ao calcular cotação para transportadora ${regiao.transportadora.nome}: ${msg}`)
         return null
       }
     })
@@ -195,35 +196,35 @@ export class CotacaoService {
       const quantidade = (produto as unknown as { quantidade: number }).quantidade || 1
       const valorVenda = (produto as unknown as { valorVenda: number }).valorVenda || 0
 
-      // Verificar se deve usar dados do produto pai
+      // Produto pai e flag de herança
       const pai = produto.produtoPai as typeof produto | null
-      const usarDadosPai = pai && (pai as unknown as { usarDadosPaiParaVariacoes: boolean }).usarDadosPaiParaVariacoes
+      const usarDadosPadraosPai = pai && (pai as unknown as { usarDadosPaiParaVariacoes: boolean }).usarDadosPaiParaVariacoes
 
-      // Buscar config específica do filho e do pai
+      // Config por transportadora: SEMPRE herda do pai se o filho não tem (independente da flag)
       const configFilho = produto.cubagens.find(c => c.transportadoraId === regiao.transportadoraId)
-      const configPai = usarDadosPai && pai
+      const configPai = pai
         ? pai.cubagens.find(c => c.transportadoraId === regiao.transportadoraId)
         : undefined
 
-      // Prioridade cubagem: config filho > config pai > cubagem filho (se > 0) > cubagem pai
+      // Prioridade cubagem: config filho > config pai > cubagem filho (se > 0 ou flag desligada) > cubagem pai
       let cubagemM3: number
       if (configFilho?.cubagem != null) {
         cubagemM3 = Number(configFilho.cubagem)
       } else if (configPai?.cubagem != null) {
         cubagemM3 = Number(configPai.cubagem)
-      } else if (Number(produto.cubagem) > 0 || !usarDadosPai) {
+      } else if (Number(produto.cubagem) > 0 || !usarDadosPadraosPai) {
         cubagemM3 = Number(produto.cubagem)
       } else {
         cubagemM3 = Number(pai!.cubagem)
       }
 
-      // Prioridade peso: config filho > config pai > peso filho (se > 0) > peso pai
+      // Prioridade peso: config filho > config pai > peso filho (se > 0 ou flag desligada) > peso pai
       let pesoRealUnitario: number
       if (configFilho?.peso != null) {
         pesoRealUnitario = Number(configFilho.peso)
       } else if (configPai?.peso != null) {
         pesoRealUnitario = Number(configPai.peso)
-      } else if (Number(produto.peso) > 0 || !usarDadosPai) {
+      } else if (Number(produto.peso) > 0 || !usarDadosPadraosPai) {
         pesoRealUnitario = Number(produto.peso)
       } else {
         pesoRealUnitario = Number(pai!.peso)
