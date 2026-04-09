@@ -199,25 +199,35 @@ export class CotacaoService {
       const pai = produto.produtoPai as typeof produto | null
       const usarDadosPai = pai && (pai as unknown as { usarDadosPaiParaVariacoes: boolean }).usarDadosPaiParaVariacoes
 
-      // Buscar config específica do filho primeiro, depois do pai
-      let configEspecifica = produto.cubagens.find(c => c.transportadoraId === regiao.transportadoraId)
-      if (!configEspecifica && usarDadosPai && pai) {
-        configEspecifica = pai.cubagens.find(c => c.transportadoraId === regiao.transportadoraId)
+      // Buscar config específica do filho e do pai
+      const configFilho = produto.cubagens.find(c => c.transportadoraId === regiao.transportadoraId)
+      const configPai = usarDadosPai && pai
+        ? pai.cubagens.find(c => c.transportadoraId === regiao.transportadoraId)
+        : undefined
+
+      // Prioridade cubagem: config filho > config pai > cubagem filho (se > 0) > cubagem pai
+      let cubagemM3: number
+      if (configFilho?.cubagem != null) {
+        cubagemM3 = Number(configFilho.cubagem)
+      } else if (configPai?.cubagem != null) {
+        cubagemM3 = Number(configPai.cubagem)
+      } else if (Number(produto.cubagem) > 0 || !usarDadosPai) {
+        cubagemM3 = Number(produto.cubagem)
+      } else {
+        cubagemM3 = Number(pai!.cubagem)
       }
 
-      // Para cubagem: usa config específica > valor do filho > valor do pai
-      const cubagemM3 = configEspecifica?.cubagem != null
-        ? Number(configEspecifica.cubagem)
-        : (Number(produto.cubagem) > 0 || !usarDadosPai)
-          ? Number(produto.cubagem)
-          : Number(pai!.cubagem)
-
-      // Para peso: usa config específica > valor do filho > valor do pai
-      const pesoRealUnitario = configEspecifica?.peso != null
-        ? Number(configEspecifica.peso)
-        : (Number(produto.peso) > 0 || !usarDadosPai)
-          ? Number(produto.peso)
-          : Number(pai!.peso)
+      // Prioridade peso: config filho > config pai > peso filho (se > 0) > peso pai
+      let pesoRealUnitario: number
+      if (configFilho?.peso != null) {
+        pesoRealUnitario = Number(configFilho.peso)
+      } else if (configPai?.peso != null) {
+        pesoRealUnitario = Number(configPai.peso)
+      } else if (Number(produto.peso) > 0 || !usarDadosPai) {
+        pesoRealUnitario = Number(produto.peso)
+      } else {
+        pesoRealUnitario = Number(pai!.peso)
+      }
       const pesoCubadoUnitario = this.calcularPesoCubado(fatorCubagem, cubagemM3)
       
       pesoReal += pesoRealUnitario * quantidade
