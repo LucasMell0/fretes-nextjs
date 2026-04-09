@@ -60,6 +60,7 @@ interface LogRequisicao {
   userAgent: string | null
   produtos: Produto[]
   resultados: Resultado[]
+  erros: string[]
 }
 
 interface LogsResponse {
@@ -449,6 +450,23 @@ export default function LogsRequisicaoPage() {
                   </CardContent>
                 </Card>
               </div>
+
+              {/* Erros */}
+              {logSelecionado.erros && logSelecionado.erros.length > 0 && (
+                <div>
+                  <h4 className="font-semibold text-sm mb-2 text-red-500">Erros ({logSelecionado.erros.length})</h4>
+                  <Card className="border-red-500/20">
+                    <CardContent className="p-4 space-y-2">
+                      {logSelecionado.erros.map((erro, i) => (
+                        <div key={i} className="flex items-start gap-2">
+                          <XCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+                          <p className="text-sm text-red-400">{erro}</p>
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
             </div>
           )}
         </DialogContent>

@@ -46,10 +46,19 @@ export const GET = withAuth(async (req, { userId }) => {
     ])
 
     const logsFormatados = logs.map(log => {
-      // Extrair resultados do JSON
+      // Extrair resultados do JSON (formato novo ou legado)
       let resultados: Array<Record<string, unknown>> = []
+      let erros: string[] = []
       try {
-        resultados = JSON.parse(log.resultadoJson)
+        const parsed = JSON.parse(log.resultadoJson)
+        if (Array.isArray(parsed)) {
+          // Formato legado: array direto
+          resultados = parsed
+        } else if (parsed.cotacoes) {
+          // Formato novo: { cotacoes: [...], _erros: [...] }
+          resultados = parsed.cotacoes || []
+          erros = parsed._erros || []
+        }
       } catch { /* ignore */ }
 
       return {
@@ -78,6 +87,7 @@ export const GET = withAuth(async (req, { userId }) => {
           pesoCubado: r.peso_cubado,
           pesoTaxado: r.peso_taxado,
         })),
+        erros,
       }
     })
 

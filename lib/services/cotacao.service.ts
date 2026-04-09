@@ -115,8 +115,15 @@ export class CotacaoService {
       })
     }
 
+    // Guardar erros para log
+    this._ultimosErros = errosPorTransportadora
+
     return cotacoes.sort((a, b) => a.valor_frete - b.valor_frete)
   }
+
+  /** Erros da última cotação (para log) */
+  private _ultimosErros: string[] = []
+  get ultimosErros(): string[] { return this._ultimosErros }
 
   /**
    * Busca transportadoras que atendem o CEP informado
@@ -507,7 +514,10 @@ export class CotacaoService {
         origem,
         marketplace,
         produtosJson: JSON.stringify(produtos),
-        resultadoJson: JSON.stringify(resultados),
+        resultadoJson: JSON.stringify({
+          cotacoes: resultados,
+          _erros: this._ultimosErros,
+        }),
         melhorTransportadoraId: melhorCotacao?.transportadora_id,
         melhorValor: melhorCotacao?.valor_frete,
         melhorPrazo: melhorCotacao?.prazo_entrega,
