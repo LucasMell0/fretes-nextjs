@@ -196,18 +196,28 @@ export class CotacaoService {
       const valorVenda = (produto as unknown as { valorVenda: number }).valorVenda || 0
 
       // Verificar se deve usar dados do produto pai
-      const usarDadosPai = produto.produtoPai && (produto.produtoPai as unknown as { usarDadosPaiParaVariacoes: boolean }).usarDadosPaiParaVariacoes
-      const produtoReferencia = usarDadosPai && produto.produtoPai ? produto.produtoPai : produto
-      
-      const configEspecifica = produtoReferencia.cubagens.find(c => c.transportadoraId === regiao.transportadoraId)
+      const pai = produto.produtoPai as typeof produto | null
+      const usarDadosPai = pai && (pai as unknown as { usarDadosPaiParaVariacoes: boolean }).usarDadosPaiParaVariacoes
 
+      // Buscar config específica do filho primeiro, depois do pai
+      let configEspecifica = produto.cubagens.find(c => c.transportadoraId === regiao.transportadoraId)
+      if (!configEspecifica && usarDadosPai && pai) {
+        configEspecifica = pai.cubagens.find(c => c.transportadoraId === regiao.transportadoraId)
+      }
+
+      // Para cubagem: usa config específica > valor do filho > valor do pai
       const cubagemM3 = configEspecifica?.cubagem != null
         ? Number(configEspecifica.cubagem)
-        : Number(produtoReferencia.cubagem)
+        : (Number(produto.cubagem) > 0 || !usarDadosPai)
+          ? Number(produto.cubagem)
+          : Number(pai!.cubagem)
 
+      // Para peso: usa config específica > valor do filho > valor do pai
       const pesoRealUnitario = configEspecifica?.peso != null
         ? Number(configEspecifica.peso)
-        : Number(produtoReferencia.peso)
+        : (Number(produto.peso) > 0 || !usarDadosPai)
+          ? Number(produto.peso)
+          : Number(pai!.peso)
       const pesoCubadoUnitario = this.calcularPesoCubado(fatorCubagem, cubagemM3)
       
       pesoReal += pesoRealUnitario * quantidade
