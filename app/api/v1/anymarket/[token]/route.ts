@@ -104,10 +104,11 @@ export async function POST(
     const marketplace = body.marketplace || 'Anymarket'
 
     // 4. Montar array de produtos para cotação usando SKU
-    const produtosParaCotar = body.products.map((p: { sku: string; amount?: string; value?: number }) => ({
-      sku: p.sku,
-      quantidade: parseInt(p.amount || '1'),
-      valor: p.value || 0,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const produtosParaCotar = body.products.map((p: any) => ({
+      sku: String(p.sku),
+      quantidade: Number(p.amount) || 1,
+      valor: Number(p.value) || 0,
     }))
 
     // 5. Realizar cotação (com isolamento multi-tenant)
