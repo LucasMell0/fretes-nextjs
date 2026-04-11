@@ -61,6 +61,12 @@ export class CotacaoService {
   async cotar(cep: string, produtos: ProdutoCotacao[], usuarioId?: number): Promise<{ cotacoes: ResultadoCotacao[]; erros: string[] }> {
     const cepLimpo = cep.replace(/\D/g, '')
 
+    // Cache do resultado final: mesmo CEP + SKUs + quantidades = mesmo resultado
+    const skusKey = produtos.map(p => `${p.sku}:${p.quantidade}:${p.valor || 0}`).sort().join('|')
+    const cotacaoCacheKey = `cotacao:${usuarioId}:${cepLimpo}:${skusKey}`
+    const cachedResult = cache.get<{ cotacoes: ResultadoCotacao[]; erros: string[] }>(cotacaoCacheKey)
+    if (cachedResult) return cachedResult
+
     // Buscar regiões e produtos em PARALELO (2 queries independentes)
     const [regioes, produtosCompletos] = await Promise.all([
       this.buscarTransportadorasPorCep(cepLimpo, usuarioId),
@@ -117,10 +123,17 @@ export class CotacaoService {
       })
     }
 
-    return {
+    const resultado = {
       cotacoes: cotacoes.sort((a, b) => a.valor_frete - b.valor_frete),
       erros: errosPorTransportadora,
     }
+
+    // Cachear resultado final por 30 segundos
+    if (cotacoes.length > 0) {
+      cache.set(cotacaoCacheKey, resultado, 30)
+    }
+
+    return resultado
   }
 
   /**
@@ -156,7 +169,7 @@ export class CotacaoService {
       },
     })
 
-    cache.set(cacheKey, result, 60)
+    cache.set(cacheKey, result, 300) // 5 minutos
     return result
   }
 
@@ -197,7 +210,7 @@ export class CotacaoService {
         },
       })
 
-      cache.set(cacheKey, produtosDB, 60)
+      cache.set(cacheKey, produtosDB, 300) // 5 minutos
     }
 
     return produtosDB.map(p => {
