@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { cotacaoService, CotacaoError } from '@/lib/services/cotacao.service'
 import { rateLimitMiddleware } from '@/lib/rate-limit'
 import { logger } from '@/lib/logger'
+import { cache } from '@/lib/cache'
 
 /**
  * API de Cotação de Frete - Anymarket
@@ -64,11 +65,18 @@ export async function POST(
 
     const { token } = params
 
-    // 1. Validar token e obter integração (select mínimo para performance)
-    integracao = await prisma.usuarioIntegracaoCanal.findUnique({
-      where: { token },
-      select: { id: true, ativo: true, usuarioId: true },
-    })
+    // 1. Validar token (cache de 5 minutos)
+    const tokenCacheKey = `token:${token}`
+    integracao = cache.get(tokenCacheKey)
+    if (!integracao) {
+      integracao = await prisma.usuarioIntegracaoCanal.findUnique({
+        where: { token },
+        select: { id: true, ativo: true, usuarioId: true },
+      })
+      if (integracao) {
+        cache.set(tokenCacheKey, integracao, 300)
+      }
+    }
 
     if (!integracao || !integracao.ativo) {
       await salvarLog(null, request, 401, 'Invalid or inactive token', Date.now() - inicio)

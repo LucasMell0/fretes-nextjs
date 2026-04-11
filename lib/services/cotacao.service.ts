@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
+import { cache } from '@/lib/cache'
 import type {
   ProdutoCotacao,
   ResultadoCotacao,
@@ -123,9 +124,15 @@ export class CotacaoService {
   }
 
   /**
-   * Busca transportadoras que atendem o CEP informado
+   * Busca transportadoras que atendem o CEP informado (com cache de 60s)
    */
-  private async buscarTransportadorasPorCep(cep: string, usuarioId?: number) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private async buscarTransportadorasPorCep(cep: string, usuarioId?: number): Promise<any[]> {
+    const cacheKey = `regioes:${usuarioId}:${cep}`
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cached = cache.get<any[]>(cacheKey)
+    if (cached) return cached
+
     const whereClause: Record<string, unknown> = {
       ativo: true,
       transportadora: {
@@ -144,7 +151,7 @@ export class CotacaoService {
       whereClause.usuarioId = usuarioId
     }
 
-    return await prisma.transportadoraRegiao.findMany({
+    const result = await prisma.transportadoraRegiao.findMany({
       where: whereClause,
       include: {
         transportadora: {
@@ -164,37 +171,50 @@ export class CotacaoService {
         taxas: true,
       },
     })
+
+    cache.set(cacheKey, result, 60)
+    return result
   }
 
   /**
-   * Busca dados completos dos produtos no banco
+   * Busca dados completos dos produtos no banco (com cache de 60s)
    */
   private async buscarDadosProdutos(produtos: ProdutoCotacao[], usuarioId?: number) {
     const skus = produtos.map(p => p.sku)
-    
-    const whereClause: Record<string, unknown> = {
-      sku: {
-        in: skus,
-      },
-      ativo: true,
-    }
+    const skusSorted = [...skus].sort().join(',')
+    const cacheKey = `produtos:${usuarioId}:${skusSorted}`
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cachedDB = cache.get<any[]>(cacheKey)
 
-    // Filtrar por usuarioId se fornecido (isolamento multi-tenant)
-    if (usuarioId) {
-      whereClause.usuarioId = usuarioId
-    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let produtosDB: any[]
 
-    const produtosDB = await prisma.produto.findMany({
-      where: whereClause,
-      include: {
-        cubagens: true,
-        produtoPai: {
-          include: {
-            cubagens: true,
+    if (cachedDB) {
+      produtosDB = cachedDB
+    } else {
+      const whereClause: Record<string, unknown> = {
+        sku: { in: skus },
+        ativo: true,
+      }
+
+      if (usuarioId) {
+        whereClause.usuarioId = usuarioId
+      }
+
+      produtosDB = await prisma.produto.findMany({
+        where: whereClause,
+        include: {
+          cubagens: true,
+          produtoPai: {
+            include: {
+              cubagens: true,
+            },
           },
         },
-      },
-    })
+      })
+
+      cache.set(cacheKey, produtosDB, 60)
+    }
 
     return produtosDB.map(p => {
       const produtoInput = produtos.find(pi => pi.sku === p.sku)
@@ -228,9 +248,11 @@ export class CotacaoService {
       const usarDadosPadraosPai = pai && (pai as unknown as { usarDadosPaiParaVariacoes: boolean }).usarDadosPaiParaVariacoes
 
       // Config por transportadora: SEMPRE herda do pai se o filho não tem (independente da flag)
-      const configFilho = produto.cubagens.find(c => c.transportadoraId === regiao.transportadoraId)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const configFilho = produto.cubagens.find((c: any) => c.transportadoraId === regiao.transportadoraId)
       const configPai = pai
-        ? pai.cubagens.find(c => c.transportadoraId === regiao.transportadoraId)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ? pai.cubagens.find((c: any) => c.transportadoraId === regiao.transportadoraId)
         : undefined
 
       // Prioridade cubagem: config filho > config pai > cubagem filho (se > 0 ou flag desligada) > cubagem pai
@@ -274,8 +296,9 @@ export class CotacaoService {
     const pesoFinal = this.arredondarPeso(pesoTaxado)
 
     // Buscar faixa que contenha o peso exato
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let faixaPreco = regiao.precos.find(
-      f => pesoFinal >= Number(f.pesoInicial) && pesoFinal <= Number(f.pesoFinal)
+      (f: any) => pesoFinal >= Number(f.pesoInicial) && pesoFinal <= Number(f.pesoFinal)
     )
     
     let valorBase = 0
@@ -295,7 +318,8 @@ export class CotacaoService {
       }
 
       // Pega a última faixa (maior peso final)
-      const ultimaFaixa = regiao.precos.reduce((prev, current) => 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ultimaFaixa = regiao.precos.reduce((prev: any, current: any) =>
         Number(current.pesoFinal) > Number(prev.pesoFinal) ? current : prev
       )
 
