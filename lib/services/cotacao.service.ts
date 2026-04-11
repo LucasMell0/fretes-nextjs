@@ -129,51 +129,31 @@ export class CotacaoService {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private async buscarTransportadorasPorCep(cep: string, usuarioId?: number): Promise<any[]> {
     const cacheKey = `regioes:${usuarioId}:${cep}`
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const cached = cache.get<any[]>(cacheKey)
-    if (cached) return cached
 
-    const whereClause: Record<string, unknown> = {
-      ativo: true,
-      transportadora: {
+    return cache.getOrFetch(cacheKey, 60, async () => {
+      const whereClause: Record<string, unknown> = {
         ativo: true,
-      },
-      cepInicio: {
-        lte: cep,
-      },
-      cepFim: {
-        gte: cep,
-      },
-    }
+        transportadora: { ativo: true },
+        cepInicio: { lte: cep },
+        cepFim: { gte: cep },
+      }
 
-    // Filtrar por usuarioId se fornecido (isolamento multi-tenant)
-    if (usuarioId) {
-      whereClause.usuarioId = usuarioId
-    }
+      if (usuarioId) {
+        whereClause.usuarioId = usuarioId
+      }
 
-    const result = await prisma.transportadoraRegiao.findMany({
-      where: whereClause,
-      include: {
-        transportadora: {
-          select: {
-            id: true,
-            nome: true,
-            fatorCubagem: true,
-            margemLucro: true,
+      return prisma.transportadoraRegiao.findMany({
+        where: whereClause,
+        include: {
+          transportadora: {
+            select: { id: true, nome: true, fatorCubagem: true, margemLucro: true },
           },
+          precos: { orderBy: { pesoInicial: 'asc' } },
+          kgAdicional: true,
+          taxas: true,
         },
-        precos: {
-          orderBy: {
-            pesoInicial: 'asc',
-          },
-        },
-        kgAdicional: true,
-        taxas: true,
-      },
+      })
     })
-
-    cache.set(cacheKey, result, 60)
-    return result
   }
 
   /**
@@ -183,15 +163,9 @@ export class CotacaoService {
     const skus = produtos.map(p => p.sku)
     const skusSorted = [...skus].sort().join(',')
     const cacheKey = `produtos:${usuarioId}:${skusSorted}`
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const cachedDB = cache.get<any[]>(cacheKey)
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let produtosDB: any[]
-
-    if (cachedDB) {
-      produtosDB = cachedDB
-    } else {
+    const produtosDB = await cache.getOrFetch<any[]>(cacheKey, 60, async () => {
       const whereClause: Record<string, unknown> = {
         sku: { in: skus },
         ativo: true,
@@ -201,7 +175,7 @@ export class CotacaoService {
         whereClause.usuarioId = usuarioId
       }
 
-      produtosDB = await prisma.produto.findMany({
+      return prisma.produto.findMany({
         where: whereClause,
         include: {
           cubagens: true,
@@ -212,9 +186,7 @@ export class CotacaoService {
           },
         },
       })
-
-      cache.set(cacheKey, produtosDB, 60)
-    }
+    })
 
     return produtosDB.map(p => {
       const produtoInput = produtos.find(pi => pi.sku === p.sku)
