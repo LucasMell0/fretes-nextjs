@@ -89,6 +89,8 @@ export const GET = withAuth(async (req, { userId }) => {
           pesoTaxado: r.peso_taxado,
         })),
         erros,
+        requestRaw: log.produtosJson,
+        responseRaw: log.resultadoJson,
       }
     })
 

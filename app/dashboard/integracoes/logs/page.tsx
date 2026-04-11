@@ -62,6 +62,8 @@ interface LogRequisicao {
   produtos: Produto[]
   resultados: Resultado[]
   erros: string[]
+  requestRaw: string
+  responseRaw: string
 }
 
 interface LogsResponse {
@@ -530,6 +532,42 @@ export default function LogsRequisicaoPage() {
                   </Card>
                 </div>
               )}
+
+              {/* JSON Bruto - Request */}
+              <div>
+                <h4 className="font-semibold text-sm mb-2">Request (o que chegou)</h4>
+                <Card>
+                  <CardContent className="p-4">
+                    <pre className="text-xs font-mono bg-muted p-3 rounded-md overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap">
+                      {(() => {
+                        try {
+                          return JSON.stringify(JSON.parse(logSelecionado.requestRaw), null, 2)
+                        } catch {
+                          return logSelecionado.requestRaw || 'Sem dados'
+                        }
+                      })()}
+                    </pre>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* JSON Bruto - Response */}
+              <div>
+                <h4 className="font-semibold text-sm mb-2">Response (o que respondemos)</h4>
+                <Card>
+                  <CardContent className="p-4">
+                    <pre className="text-xs font-mono bg-muted p-3 rounded-md overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap">
+                      {(() => {
+                        try {
+                          return JSON.stringify(JSON.parse(logSelecionado.responseRaw), null, 2)
+                        } catch {
+                          return logSelecionado.responseRaw || 'Sem dados'
+                        }
+                      })()}
+                    </pre>
+                  </CardContent>
+                </Card>
+              </div>
             </div>
           )}
         </DialogContent>
