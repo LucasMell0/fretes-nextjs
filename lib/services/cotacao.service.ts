@@ -129,31 +129,35 @@ export class CotacaoService {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private async buscarTransportadorasPorCep(cep: string, usuarioId?: number): Promise<any[]> {
     const cacheKey = `regioes:${usuarioId}:${cep}`
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cached = cache.get<any[]>(cacheKey)
+    if (cached) return cached
 
-    return cache.getOrFetch(cacheKey, 60, async () => {
-      const whereClause: Record<string, unknown> = {
-        ativo: true,
-        transportadora: { ativo: true },
-        cepInicio: { lte: cep },
-        cepFim: { gte: cep },
-      }
+    const whereClause: Record<string, unknown> = {
+      ativo: true,
+      transportadora: { ativo: true },
+      cepInicio: { lte: cep },
+      cepFim: { gte: cep },
+    }
 
-      if (usuarioId) {
-        whereClause.usuarioId = usuarioId
-      }
+    if (usuarioId) {
+      whereClause.usuarioId = usuarioId
+    }
 
-      return prisma.transportadoraRegiao.findMany({
-        where: whereClause,
-        include: {
-          transportadora: {
-            select: { id: true, nome: true, fatorCubagem: true, margemLucro: true },
-          },
-          precos: { orderBy: { pesoInicial: 'asc' } },
-          kgAdicional: true,
-          taxas: true,
+    const result = await prisma.transportadoraRegiao.findMany({
+      where: whereClause,
+      include: {
+        transportadora: {
+          select: { id: true, nome: true, fatorCubagem: true, margemLucro: true },
         },
-      })
+        precos: { orderBy: { pesoInicial: 'asc' } },
+        kgAdicional: true,
+        taxas: true,
+      },
     })
+
+    cache.set(cacheKey, result, 60)
+    return result
   }
 
   /**
@@ -165,7 +169,13 @@ export class CotacaoService {
     const cacheKey = `produtos:${usuarioId}:${skusSorted}`
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const produtosDB = await cache.getOrFetch<any[]>(cacheKey, 60, async () => {
+    let produtosDB: any[]
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cachedDB = cache.get<any[]>(cacheKey)
+
+    if (cachedDB) {
+      produtosDB = cachedDB
+    } else {
       const whereClause: Record<string, unknown> = {
         sku: { in: skus },
         ativo: true,
@@ -175,7 +185,7 @@ export class CotacaoService {
         whereClause.usuarioId = usuarioId
       }
 
-      return prisma.produto.findMany({
+      produtosDB = await prisma.produto.findMany({
         where: whereClause,
         include: {
           cubagens: true,
@@ -186,7 +196,9 @@ export class CotacaoService {
           },
         },
       })
-    })
+
+      cache.set(cacheKey, produtosDB, 60)
+    }
 
     return produtosDB.map(p => {
       const produtoInput = produtos.find(pi => pi.sku === p.sku)

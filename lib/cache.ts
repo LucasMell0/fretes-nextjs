@@ -1,10 +1,9 @@
 /**
- * Cache em memória com TTL e deduplicação de requests simultâneos
- * Evita queries repetitivas e cache stampede em alta concorrência
+ * Cache em memória com TTL para dados que mudam pouco
+ * Usado para evitar queries repetitivas no banco durante alta concorrência
  */
 class MemoryCache {
   private cache = new Map<string, { data: unknown; expiresAt: number }>()
-  private pending = new Map<string, Promise<unknown>>()
 
   get<T>(key: string): T | null {
     const entry = this.cache.get(key)
@@ -21,35 +20,6 @@ class MemoryCache {
       data,
       expiresAt: Date.now() + ttlSeconds * 1000,
     })
-  }
-
-  /**
-   * Busca no cache ou executa a função. Se já houver uma request
-   * pendente para a mesma chave, espera o resultado dela (sem duplicar query).
-   */
-  async getOrFetch<T>(key: string, ttlSeconds: number, fetchFn: () => Promise<T>): Promise<T> {
-    // 1. Já no cache?
-    const cached = this.get<T>(key)
-    if (cached) return cached
-
-    // 2. Já tem uma request pendente para essa chave? Espera ela.
-    const pendingRequest = this.pending.get(key)
-    if (pendingRequest) {
-      return pendingRequest as Promise<T>
-    }
-
-    // 3. Primeira request: executa e compartilha o resultado
-    const promise = fetchFn().then(result => {
-      this.set(key, result, ttlSeconds)
-      this.pending.delete(key)
-      return result
-    }).catch(err => {
-      this.pending.delete(key)
-      throw err
-    })
-
-    this.pending.set(key, promise)
-    return promise
   }
 
   delete(key: string): void {
