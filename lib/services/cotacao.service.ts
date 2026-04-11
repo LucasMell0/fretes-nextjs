@@ -499,7 +499,8 @@ export class CotacaoService {
     ipOrigem?: string,
     userAgent?: string,
     tempoMs?: number,
-    erros?: string[]
+    erros?: string[],
+    respostaCanal?: Record<string, unknown>
   ): Promise<void> {
     const melhorCotacao = resultados[0]
 
@@ -531,6 +532,7 @@ export class CotacaoService {
         resultadoJson: JSON.stringify({
           cotacoes: resultados,
           _erros: erros || [],
+          _respostaCanal: respostaCanal || null,
         }),
         melhorTransportadoraId: melhorCotacao?.transportadora_id,
         melhorValor: melhorCotacao?.valor_frete,

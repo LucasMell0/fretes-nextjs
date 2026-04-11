@@ -49,15 +49,15 @@ export const GET = withAuth(async (req, { userId }) => {
       // Extrair resultados do JSON (formato novo ou legado)
       let resultados: Array<Record<string, unknown>> = []
       let erros: string[] = []
+      let respostaCanal: Record<string, unknown> | null = null
       try {
         const parsed = JSON.parse(log.resultadoJson)
         if (Array.isArray(parsed)) {
-          // Formato legado: array direto
           resultados = parsed
         } else if (parsed.cotacoes) {
-          // Formato novo: { cotacoes: [...], _erros: [...] }
           resultados = parsed.cotacoes || []
           erros = parsed._erros || []
+          respostaCanal = parsed._respostaCanal || null
         }
       } catch { /* ignore */ }
 
@@ -89,6 +89,7 @@ export const GET = withAuth(async (req, { userId }) => {
           pesoTaxado: r.peso_taxado,
         })),
         erros,
+        respostaCanal,
         requestRaw: log.produtosJson,
         responseRaw: log.resultadoJson,
       }

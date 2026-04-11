@@ -62,6 +62,11 @@ interface LogRequisicao {
   produtos: Produto[]
   resultados: Resultado[]
   erros: string[]
+  respostaCanal: {
+    anymarketResponse?: { items: Array<Record<string, unknown>> }
+    statusEnviado?: number
+    tempoMs?: number
+  } | null
   requestRaw: string
   responseRaw: string
 }
@@ -529,6 +534,38 @@ export default function LogsRequisicaoPage() {
                           <p className="text-sm text-red-400">{erro}</p>
                         </div>
                       ))}
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {/* Resposta enviada ao canal (Anymarket) */}
+              {logSelecionado.respostaCanal?.anymarketResponse && (
+                <div>
+                  <h4 className="font-semibold text-sm mb-2">Resposta enviada ao Anymarket</h4>
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex gap-4 mb-3">
+                        <div>
+                          <p className="text-xs text-muted-foreground">Status HTTP</p>
+                          <Badge variant={logSelecionado.respostaCanal.statusEnviado === 200 ? 'default' : 'destructive'}>
+                            {logSelecionado.respostaCanal.statusEnviado}
+                          </Badge>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Items retornados</p>
+                          <p className="text-sm font-semibold">
+                            {logSelecionado.respostaCanal.anymarketResponse.items?.length || 0}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Tempo</p>
+                          <p className="text-sm font-mono">{logSelecionado.respostaCanal.tempoMs}ms</p>
+                        </div>
+                      </div>
+                      <pre className="text-xs font-mono bg-muted p-3 rounded-md overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap">
+                        {JSON.stringify(logSelecionado.respostaCanal.anymarketResponse, null, 2)}
+                      </pre>
                     </CardContent>
                   </Card>
                 </div>

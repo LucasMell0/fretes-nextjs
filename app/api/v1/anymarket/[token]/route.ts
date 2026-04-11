@@ -123,7 +123,8 @@ export async function POST(
     Promise.all([
       cotacaoService.salvarLogCotacao(
         cep, produtosParaCotar, cotacoes, 'API', marketplace,
-        integracao.usuarioId, undefined, undefined, tempoTotal, erros
+        integracao.usuarioId, undefined, undefined, tempoTotal, erros,
+        { anymarketResponse: response, statusEnviado: 200, tempoMs: tempoTotal }
       ),
       salvarLog(integracao.id, request, 200, response, tempoTotal, body),
       prisma.usuarioIntegracaoCanal.update({
