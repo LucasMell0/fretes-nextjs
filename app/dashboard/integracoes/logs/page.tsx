@@ -138,9 +138,10 @@ export default function LogsRequisicaoPage() {
     return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
   }
 
-  const totalSucesso = data?.logs.filter(l => l.totalTransportadoras > 0).length || 0
-  const totalFalha = data?.logs.filter(l => l.totalTransportadoras === 0).length || 0
-  const logsComTempo = data?.logs.filter(l => l.tempoMs != null) || []
+  const logs = data?.logs || []
+  const totalSucesso = logs.filter(l => l.totalTransportadoras > 0).length
+  const totalFalha = logs.filter(l => l.totalTransportadoras === 0).length
+  const logsComTempo = logs.filter(l => l.tempoMs != null)
   const tempoMedio = logsComTempo.length > 0
     ? Math.round(logsComTempo.reduce((acc, l) => acc + (l.tempoMs || 0), 0) / logsComTempo.length)
     : null
