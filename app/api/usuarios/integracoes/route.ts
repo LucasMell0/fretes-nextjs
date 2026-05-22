@@ -17,6 +17,8 @@ export const GET = withAuth(async (req, { userId }) => {
         ativo: true,
         status: true,
         token: true,
+        accessToken: true,
+        tokenExpiresAt: true,
         ultimaRequisicao: true,
         totalRequisicoes: true,
         criadoEm: true,
@@ -43,7 +45,13 @@ export const GET = withAuth(async (req, { userId }) => {
       },
     })
 
-    return NextResponse.json(integracoes)
+    // Não expor o token criptografado ao frontend — só sinalizar presença
+    const sanitized = integracoes.map(i => ({
+      ...i,
+      accessToken: i.accessToken ? true : null,
+    }))
+
+    return NextResponse.json(sanitized)
   } catch (error) {
     logger.error('Erro ao buscar integrações:', error)
     return NextResponse.json(
