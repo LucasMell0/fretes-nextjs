@@ -241,7 +241,7 @@ export default function TaxasPage() {
     setSalvando(true)
     try {
       const res = await fetch(`/api/regioes/${regiaoId}/taxas`, {
-        method: 'POST',
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
       })
