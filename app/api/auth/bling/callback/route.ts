@@ -17,12 +17,16 @@ import crypto from 'crypto'
  */
 
 export async function GET(request: NextRequest) {
+  // Atrás de proxy reverso (Nginx), request.nextUrl.origin pode apontar para o bind interno (0.0.0.0:3000).
+  // Usa NEXTAUTH_URL quando disponível para construir redirects com a URL pública correta.
+  const baseUrl = process.env.NEXTAUTH_URL || request.nextUrl.origin
+
   try {
     // 0. Verificar sessão do usuário
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
       return NextResponse.redirect(
-        `${request.nextUrl.origin}/login?error=session_expired`
+        `${baseUrl}/login?error=session_expired`
       )
     }
     const sessionUserId = parseInt(session.user.id as string)
@@ -33,7 +37,7 @@ export async function GET(request: NextRequest) {
 
     if (!code || !stateParam) {
       return NextResponse.redirect(
-        `${request.nextUrl.origin}/dashboard/integracoes?error=missing_params`
+        `${baseUrl}/dashboard/integracoes?error=missing_params`
       )
     }
 
@@ -43,7 +47,7 @@ export async function GET(request: NextRequest) {
 
     if (!integracaoId) {
       return NextResponse.redirect(
-        `${request.nextUrl.origin}/dashboard/integracoes?error=invalid_state`
+        `${baseUrl}/dashboard/integracoes?error=invalid_state`
       )
     }
 
@@ -57,14 +61,14 @@ export async function GET(request: NextRequest) {
 
     if (!integracao) {
       return NextResponse.redirect(
-        `${request.nextUrl.origin}/dashboard/integracoes?error=integration_not_found`
+        `${baseUrl}/dashboard/integracoes?error=integration_not_found`
       )
     }
 
     // Verificar se a integração pertence ao usuário logado
     if (integracao.usuarioId !== sessionUserId) {
       return NextResponse.redirect(
-        `${request.nextUrl.origin}/dashboard/integracoes?error=unauthorized`
+        `${baseUrl}/dashboard/integracoes?error=unauthorized`
       )
     }
 
@@ -81,7 +85,7 @@ export async function GET(request: NextRequest) {
 
     if (!stateValid) {
       return NextResponse.redirect(
-        `${request.nextUrl.origin}/dashboard/integracoes?error=invalid_state`
+        `${baseUrl}/dashboard/integracoes?error=invalid_state`
       )
     }
 
@@ -89,7 +93,7 @@ export async function GET(request: NextRequest) {
     const stateAge = Date.now() - (Number(config.oauthTimestamp) || 0)
     if (stateAge > 5 * 60 * 1000) {
       return NextResponse.redirect(
-        `${request.nextUrl.origin}/dashboard/integracoes?error=state_expired`
+        `${baseUrl}/dashboard/integracoes?error=state_expired`
       )
     }
 
@@ -99,7 +103,7 @@ export async function GET(request: NextRequest) {
     
     if (!clientId || !clientSecret) {
       return NextResponse.redirect(
-        `${request.nextUrl.origin}/dashboard/integracoes?error=oauth_not_configured`
+        `${baseUrl}/dashboard/integracoes?error=oauth_not_configured`
       )
     }
 
@@ -123,7 +127,7 @@ export async function GET(request: NextRequest) {
       const error = await tokenResponse.text()
       logger.error('Erro ao trocar code por token:', error)
       return NextResponse.redirect(
-        `${request.nextUrl.origin}/dashboard/integracoes?error=token_exchange_failed`
+        `${baseUrl}/dashboard/integracoes?error=token_exchange_failed`
       )
     }
 
@@ -162,14 +166,14 @@ export async function GET(request: NextRequest) {
 
     // 6. Redirecionar usuário de volta para página de integrações
     return NextResponse.redirect(
-      `${request.nextUrl.origin}/dashboard/integracoes?success=bling_connected`
+      `${baseUrl}/dashboard/integracoes?success=bling_connected`
     )
 
   } catch (error) {
     logger.error('Erro no callback OAuth Bling:', error)
     
     return NextResponse.redirect(
-      `${request.nextUrl.origin}/dashboard/integracoes?error=callback_failed`
+      `${baseUrl}/dashboard/integracoes?error=callback_failed`
     )
   }
 }
