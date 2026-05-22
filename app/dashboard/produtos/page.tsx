@@ -27,6 +27,7 @@ import { Plus, Pencil, Trash2, Loader2, Package, Box, ChevronDown, ChevronRight,
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { usePagination } from '@/hooks/use-pagination'
 import { CubagensModal } from '@/components/produtos/cubagens-modal'
+import { BulkCubagensModal } from '@/components/produtos/bulk-cubagens-modal'
 import { PaginationWrapper } from '@/components/ui/pagination-wrapper'
 import {
   Pagination,
@@ -111,6 +112,7 @@ export default function ProdutosPage() {
   const [aplicandoUsarDadosPai, setAplicandoUsarDadosPai] = useState(false)
   const [confirmUsarDadosPaiOpen, setConfirmUsarDadosPaiOpen] = useState(false)
   const [cubagensProdutoId, setCubagensProdutoId] = useState<number | null>(null)
+  const [bulkCubagensOpen, setBulkCubagensOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [dialogImportacao, setDialogImportacao] = useState(false)
   const [importando, setImportando] = useState(false)
@@ -632,13 +634,22 @@ export default function ProdutosPage() {
         </div>
         <div className="flex gap-2">
           {produtosTabelaSelecionados.size > 0 && (
-            <Button 
-              variant="destructive" 
-              onClick={() => setConfirmDeleteMultipleOpen(true)}
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Deletar Selecionados ({produtosTabelaSelecionados.size})
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                onClick={() => setBulkCubagensOpen(true)}
+              >
+                <Box className="mr-2 h-4 w-4" />
+                Editar cubagens em lote ({produtosTabelaSelecionados.size})
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => setConfirmDeleteMultipleOpen(true)}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Deletar Selecionados ({produtosTabelaSelecionados.size})
+              </Button>
+            </>
           )}
           <Button
             variant="outline"
@@ -1087,6 +1098,16 @@ export default function ProdutosPage() {
         open={cubagensProdutoId !== null}
         onOpenChange={(open) => { if (!open) setCubagensProdutoId(null) }}
         onChanged={carregarProdutos}
+      />
+
+      <BulkCubagensModal
+        produtoIds={Array.from(produtosTabelaSelecionados)}
+        open={bulkCubagensOpen}
+        onOpenChange={setBulkCubagensOpen}
+        onSuccess={() => {
+          setProdutosTabelaSelecionados(new Set())
+          carregarProdutos()
+        }}
       />
 
       {/* Dialog de Importação do Bling */}
