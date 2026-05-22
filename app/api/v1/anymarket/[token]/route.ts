@@ -112,7 +112,7 @@ export async function POST(
     }))
 
     // 5. Realizar cotação (com isolamento multi-tenant)
-    const { cotacoes, erros } = await cotacaoService.cotar(cep, produtosParaCotar, integracao.usuarioId)
+    const { cotacoes, erros, produtosDB } = await cotacaoService.cotar(cep, produtosParaCotar, integracao.usuarioId)
 
     // 6. Formatar resposta no padrão Anymarket
     const response = formatarResposta(cotacoes)
@@ -125,7 +125,8 @@ export async function POST(
       cotacaoService.salvarLogCotacao(
         cep, produtosParaCotar, cotacoes, 'API', marketplace,
         integracao.usuarioId, undefined, undefined, tempoTotal, erros,
-        { anymarketResponse: response, statusEnviado: 200, tempoMs: tempoTotal }
+        { anymarketResponse: response, statusEnviado: 200, tempoMs: tempoTotal },
+        produtosDB
       ),
       salvarLog(integracao.id, request, 200, response, tempoTotal, body),
       prisma.usuarioIntegracaoCanal.update({

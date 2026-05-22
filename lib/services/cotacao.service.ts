@@ -7,6 +7,8 @@ import type {
   TaxaAplicada,
 } from '@/types/cotacao'
 
+export type ProdutoLog = { id: number; sku: string; nome: string; peso: unknown }
+
 export class CotacaoError extends Error {
   public tipo: 'SKU_NAO_ENCONTRADO' | 'CEP_NAO_ATENDIDO'
   public detalhes: Record<string, unknown>
@@ -58,13 +60,13 @@ export class CotacaoService {
   /**
    * Realiza cotação de frete para um CEP e lista de produtos
    */
-  async cotar(cep: string, produtos: ProdutoCotacao[], usuarioId?: number): Promise<{ cotacoes: ResultadoCotacao[]; erros: string[] }> {
+  async cotar(cep: string, produtos: ProdutoCotacao[], usuarioId?: number): Promise<{ cotacoes: ResultadoCotacao[]; erros: string[]; produtosDB?: ProdutoLog[] }> {
     const cepLimpo = cep.replace(/\D/g, '')
 
     // Cache do resultado final: mesmo CEP + SKUs + quantidades = mesmo resultado
     const skusKey = produtos.map(p => `${p.sku}:${p.quantidade}:${p.valor || 0}`).sort().join('|')
     const cotacaoCacheKey = `cotacao:${usuarioId}:${cepLimpo}:${skusKey}`
-    const cachedResult = cache.get<{ cotacoes: ResultadoCotacao[]; erros: string[] }>(cotacaoCacheKey)
+    const cachedResult = cache.get<{ cotacoes: ResultadoCotacao[]; erros: string[]; produtosDB?: ProdutoLog[] }>(cotacaoCacheKey)
     if (cachedResult) return cachedResult
 
     // Buscar regiões e produtos em PARALELO (2 queries independentes)
@@ -123,9 +125,17 @@ export class CotacaoService {
       })
     }
 
+    const produtosDB: ProdutoLog[] = produtosCompletos.map(p => ({
+      id: p.id,
+      sku: p.sku,
+      nome: p.nome,
+      peso: p.peso,
+    }))
+
     const resultado = {
       cotacoes: cotacoes.sort((a, b) => a.valor_frete - b.valor_frete),
       erros: errosPorTransportadora,
+      produtosDB,
     }
 
     // Cachear resultado final por 30 segundos
@@ -513,12 +523,13 @@ export class CotacaoService {
     userAgent?: string,
     tempoMs?: number,
     erros?: string[],
-    respostaCanal?: Record<string, unknown>
+    respostaCanal?: Record<string, unknown>,
+    produtosDBCarregados?: ProdutoLog[]
   ): Promise<void> {
     const melhorCotacao = resultados[0]
 
-    // Buscar dados completos dos produtos (filtrado por tenant)
-    const produtosDB = await prisma.produto.findMany({
+    // Reusar produtos já carregados em cotar() para evitar query extra; fallback se não vier
+    const produtosDB: ProdutoLog[] = produtosDBCarregados ?? await prisma.produto.findMany({
       where: {
         sku: {
           in: produtos.map(p => p.sku),

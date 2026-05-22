@@ -3,6 +3,7 @@ import { cotacaoService, CotacaoError } from '@/lib/services/cotacao.service'
 import { prisma } from '@/lib/prisma'
 import { rateLimitMiddleware } from '@/lib/rate-limit'
 import { logger } from '@/lib/logger'
+import { cache } from '@/lib/cache'
 import { z } from 'zod'
 
 const produtoSchema = z.object({
@@ -55,11 +56,18 @@ export async function POST(request: NextRequest) {
     dadosValidados = validation.data
     const { cep, produtos, origem, marketplace, token } = dadosValidados
 
-    // Validar token e obter usuarioId para isolamento multi-tenant
-    integracao = await prisma.usuarioIntegracaoCanal.findUnique({
-      where: { token },
-      select: { id: true, ativo: true, usuarioId: true },
-    })
+    // Validar token e obter usuarioId para isolamento multi-tenant (cache 5min)
+    const tokenCacheKey = `token:${token}`
+    integracao = cache.get<{ id: number; ativo: boolean; usuarioId: number }>(tokenCacheKey)
+    if (!integracao) {
+      integracao = await prisma.usuarioIntegracaoCanal.findUnique({
+        where: { token },
+        select: { id: true, ativo: true, usuarioId: true },
+      })
+      if (integracao) {
+        cache.set(tokenCacheKey, integracao, 300)
+      }
+    }
 
     if (!integracao || !integracao.ativo) {
       return NextResponse.json(
@@ -71,7 +79,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { cotacoes: resultados, erros } = await cotacaoService.cotar(cep, produtos, integracao.usuarioId)
+    const { cotacoes: resultados, erros, produtosDB } = await cotacaoService.cotar(cep, produtos, integracao.usuarioId)
 
     const ipOrigem = request.headers.get('x-forwarded-for') ||
                      request.headers.get('x-real-ip') ||
@@ -83,7 +91,7 @@ export async function POST(request: NextRequest) {
     // Salvar log em background (não bloqueia a resposta)
     cotacaoService.salvarLogCotacao(
       cep, produtos, resultados, origem, marketplace,
-      integracao.usuarioId, ipOrigem, userAgent, tempoMs, erros
+      integracao.usuarioId, ipOrigem, userAgent, tempoMs, erros, undefined, produtosDB
     ).catch(err => logger.error('Erro ao salvar log:', err))
 
     return NextResponse.json(
