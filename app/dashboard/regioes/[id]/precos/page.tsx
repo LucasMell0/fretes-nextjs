@@ -206,7 +206,7 @@ export default function PrecosPage() {
     setSalvandoKgAdicional(true)
     try {
       const res = await fetch(`/api/regioes/${regiaoId}/kg-adicional`, {
-        method: 'POST',
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ valorKgAdicional: kgAdicional }),
       })
