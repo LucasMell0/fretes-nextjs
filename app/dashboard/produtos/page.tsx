@@ -78,6 +78,21 @@ interface Produto {
   }
 }
 
+// Remove acentos e normaliza para busca case-insensitive
+const normalizar = (s: string): string =>
+  s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+
+// Verifica se o texto bate com a query: split por palavras + match por início de palavra.
+// Multi-termo: TODOS os termos da query precisam achar um match em alguma palavra do texto.
+// Ex: query="rei caf" bate em "Rei do Café" (rei→Rei, caf→Café), não em "Ferreiro".
+const matchBusca = (texto: string, query: string): boolean => {
+  const q = normalizar(query).trim()
+  if (!q) return true
+  const palavrasTexto = normalizar(texto).split(/[\s\-_.,;:/\\()|]+/).filter(Boolean)
+  const termos = q.split(/\s+/)
+  return termos.every(t => palavrasTexto.some(p => p.startsWith(t)))
+}
+
 export default function ProdutosPage() {
   const { toast } = useToast()
   const router = useRouter()
@@ -86,7 +101,9 @@ export default function ProdutosPage() {
   const [expandidos, setExpandidos] = useState<Set<number>>(new Set())
   const [buscaTexto, setBuscaTexto] = useState('')
   const [paginaAtual, setPaginaAtual] = useState(1)
-  const [itensPorPagina] = useState(10)
+  const [itensPorPagina, setItensPorPagina] = useState(10)
+  const [aplicandoUsarDadosPai, setAplicandoUsarDadosPai] = useState(false)
+  const [confirmUsarDadosPaiOpen, setConfirmUsarDadosPaiOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [dialogImportacao, setDialogImportacao] = useState(false)
   const [importando, setImportando] = useState(false)
@@ -135,11 +152,9 @@ export default function ProdutosPage() {
   // Filtrar produtos Bling por busca
   const produtosBlingFiltrados = useMemo(() => {
     if (!buscaBling.trim()) return produtosBling
-    
-    const buscaLower = buscaBling.toLowerCase()
-    return produtosBling.filter(p => 
-      p.nome.toLowerCase().includes(buscaLower) ||
-      p.codigo?.toLowerCase().includes(buscaLower)
+    return produtosBling.filter(p =>
+      matchBusca(p.nome, buscaBling) ||
+      (p.codigo ? matchBusca(p.codigo, buscaBling) : false)
     )
   }, [produtosBling, buscaBling])
 
@@ -149,16 +164,14 @@ export default function ProdutosPage() {
     // Filtrar apenas produtos que não são variações (produtoPaiId === null)
     let produtosPai = todosProdutos.filter((p: Produto) => p.produtoPaiId === null)
     
-    // Aplicar busca por nome ou SKU
+    // Aplicar busca por nome ou SKU (acentos-insensitive, match por início de palavra, multi-termo AND)
     if (busca.trim()) {
-      const buscaLower = busca.toLowerCase()
-      produtosPai = produtosPai.filter(p => 
-        p.nome.toLowerCase().includes(buscaLower) ||
-        p.sku.toLowerCase().includes(buscaLower) ||
-        // Buscar também nas variações
-        p.variacoes?.some(v => 
-          v.nome.toLowerCase().includes(buscaLower) ||
-          v.sku.toLowerCase().includes(buscaLower)
+      produtosPai = produtosPai.filter(p =>
+        matchBusca(p.nome, busca) ||
+        matchBusca(p.sku, busca) ||
+        p.variacoes?.some(v =>
+          matchBusca(v.nome, busca) ||
+          matchBusca(v.sku, busca)
         )
       )
     }
@@ -173,6 +186,35 @@ export default function ProdutosPage() {
 
   const limparBusca = () => {
     setBuscaTexto('')
+  }
+
+  const aplicarUsarDadosPaiEmTodos = async () => {
+    setConfirmUsarDadosPaiOpen(false)
+    try {
+      setAplicandoUsarDadosPai(true)
+      const res = await fetch('/api/produtos/bulk/usar-dados-pai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ valor: true }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data?.error || 'Erro ao aplicar configuração')
+
+      toast({
+        title: 'Configuração aplicada',
+        description: `${data.atualizados} produto(s) atualizado(s) para usar dados do pai.`,
+      })
+
+      await carregarProdutos()
+    } catch (error) {
+      toast({
+        title: 'Erro',
+        description: error instanceof Error ? error.message : 'Falha ao aplicar configuração',
+        variant: 'destructive',
+      })
+    } finally {
+      setAplicandoUsarDadosPai(false)
+    }
   }
 
   const toggleProdutoTabela = (id: number) => {
@@ -578,6 +620,16 @@ export default function ProdutosPage() {
               Deletar Selecionados ({produtosTabelaSelecionados.size})
             </Button>
           )}
+          <Button
+            variant="outline"
+            onClick={() => setConfirmUsarDadosPaiOpen(true)}
+            disabled={aplicandoUsarDadosPai}
+          >
+            {aplicandoUsarDadosPai
+              ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              : <CheckCircle2 className="mr-2 h-4 w-4" />}
+            Aplicar &quot;usar dados do pai&quot; em todos
+          </Button>
           <Button variant="outline" onClick={() => setDialogImportacao(true)}>
             <Download className="mr-2 h-4 w-4" />
             Importar do Bling
@@ -840,10 +892,35 @@ export default function ProdutosPage() {
               </PaginationItem>
             </PaginationContent>
           </Pagination>
-          
-          <p className="text-center text-sm text-muted-foreground mt-2">
-            Mostrando {indiceInicio + 1} a {Math.min(indiceFim, produtosExibir.length)} de {produtosExibir.length} produtos
-          </p>
+
+          <div className="flex items-center justify-center gap-4 mt-2">
+            <p className="text-sm text-muted-foreground">
+              Mostrando {indiceInicio + 1} a {Math.min(indiceFim, produtosExibir.length)} de {produtosExibir.length} produtos
+            </p>
+            <div className="flex items-center gap-2">
+              <Label htmlFor="itens-por-pagina" className="text-sm text-muted-foreground">
+                Itens por página:
+              </Label>
+              <Select
+                value={String(itensPorPagina)}
+                onValueChange={(v) => {
+                  setItensPorPagina(Number(v))
+                  setPaginaAtual(1)
+                }}
+              >
+                <SelectTrigger id="itens-por-pagina" className="w-24 h-8">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10">10</SelectItem>
+                  <SelectItem value="25">25</SelectItem>
+                  <SelectItem value="50">50</SelectItem>
+                  <SelectItem value="100">100</SelectItem>
+                  <SelectItem value="200">200</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
         </div>
       )}
 
@@ -972,6 +1049,16 @@ export default function ProdutosPage() {
         title={`Excluir ${produtosTabelaSelecionados.size} produto(s)`}
         description={`Tem certeza que deseja excluir ${produtosTabelaSelecionados.size} produto(s) selecionado(s)? Esta ação não pode ser desfeita.`}
         confirmText="Excluir Todos"
+        cancelText="Cancelar"
+      />
+
+      <ConfirmDialog
+        open={confirmUsarDadosPaiOpen}
+        onOpenChange={setConfirmUsarDadosPaiOpen}
+        onConfirm={aplicarUsarDadosPaiEmTodos}
+        title="Aplicar &quot;usar dados do pai&quot; em todos"
+        description="Isso ativa a opção 'usar dados do pai para variações' em TODOS os produtos cadastrados. Confirma?"
+        confirmText="Aplicar em todos"
         cancelText="Cancelar"
       />
 
