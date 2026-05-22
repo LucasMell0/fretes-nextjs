@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
 import { z } from 'zod'
 import { withAuthTyped } from '@/lib/middleware/auth'
+import { invalidateProdutoCache } from '@/lib/cache'
 import { parseRouteId } from '@/lib/utils/parse'
 import { verifyOwnership } from '@/lib/utils/ownership'
 import { verifyTransportadoraOwnership } from '@/lib/validators/relationship.validator'
@@ -147,6 +148,7 @@ export const POST = withAuthTyped<RouteParams>(async (req, { userId }, params) =
           transportadora: true,
         },
       })
+      invalidateProdutoCache(userId)
       return NextResponse.json(cubagemAtualizada)
     } else {
       // Criar
@@ -160,6 +162,7 @@ export const POST = withAuthTyped<RouteParams>(async (req, { userId }, params) =
           transportadora: true,
         },
       })
+      invalidateProdutoCache(userId)
       return NextResponse.json(novaCubagem, { status: 201 })
     }
   } catch (error) {

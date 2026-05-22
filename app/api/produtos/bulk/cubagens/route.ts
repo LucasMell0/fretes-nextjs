@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
 import { z } from 'zod'
 import { withAuth } from '@/lib/middleware/auth'
+import { invalidateProdutoCache } from '@/lib/cache'
 import { verifyTransportadoraOwnership } from '@/lib/validators/relationship.validator'
 
 const bulkCubagemSchema = z.object({
@@ -80,6 +81,7 @@ export const POST = withAuth(async (req, { userId }) => {
       )
     )
 
+    invalidateProdutoCache(userId)
     return NextResponse.json({
       success: true,
       aplicados: result.length,

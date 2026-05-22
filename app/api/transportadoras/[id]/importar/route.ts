@@ -10,6 +10,7 @@ interface RouteParams {
   id: string
 }
 import { importacaoRequestSchema } from '@/lib/validators/importacao.validator'
+import { invalidateRegiaoCache } from '@/lib/cache'
 
 export const POST = withAuthTyped<RouteParams>(async (req, { userId }, params) => {
   try {
@@ -62,6 +63,7 @@ export const POST = withAuthTyped<RouteParams>(async (req, { userId }, params) =
       )
     }
 
+    invalidateRegiaoCache(userId)
     return NextResponse.json({
       sucesso: true,
       regioesImportadas: resultado.regioesImportadas,

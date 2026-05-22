@@ -366,7 +366,8 @@ export class CotacaoService {
       valorFinal += valorMargemLucro
     }
 
-    const prazoCrossDocking = produtos.reduce((acc, p) => acc + p.crossDocking, 0)
+    // Cross-docking dos produtos opera em paralelo — usa o maior, não soma.
+    const prazoCrossDocking = produtos.reduce((acc, p) => Math.max(acc, p.crossDocking || 0), 0)
     let prazoFinal = Number(faixaPreco.prazo) + prazoCrossDocking
 
     if (pesoCubado > pesoReal) {

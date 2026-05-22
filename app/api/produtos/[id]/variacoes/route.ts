@@ -6,6 +6,7 @@ import { withAuthTyped } from '@/lib/middleware/auth'
 import { parseRouteId } from '@/lib/utils/parse'
 import { verifyOwnership } from '@/lib/utils/ownership'
 import type { ProdutoWithProdutoPaiId } from '@/lib/types/prisma-helpers'
+import { invalidateProdutoCache } from '@/lib/cache'
 
 interface RouteParams {
   id: string
@@ -173,6 +174,7 @@ export const POST = withAuthTyped<RouteParams>(async (req, { userId }, params) =
       return created
     })
 
+    invalidateProdutoCache(userId)
     return NextResponse.json({
       sucesso: true,
       total: variacoesCriadas.length,

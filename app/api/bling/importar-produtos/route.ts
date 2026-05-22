@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
 import { withAuth } from '@/lib/middleware/auth'
 import { BlingService } from '@/lib/services/bling.service'
+import { invalidateProdutoCache } from '@/lib/cache'
 
 /**
  * API para importar produtos do Bling ERP
@@ -99,6 +100,7 @@ export const POST = withAuth(async (req, { userId }) => {
 
     logger.info(`Importação concluída:`, resultado)
 
+    invalidateProdutoCache(userId)
     return NextResponse.json({
       success: true,
       ...resultado

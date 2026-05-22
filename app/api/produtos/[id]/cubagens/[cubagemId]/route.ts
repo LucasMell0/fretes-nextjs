@@ -4,6 +4,7 @@ import { logger } from '@/lib/logger'
 import { withAuthTyped } from '@/lib/middleware/auth'
 import { parseRouteId } from '@/lib/utils/parse'
 import { verifyOwnership } from '@/lib/utils/ownership'
+import { invalidateProdutoCache } from '@/lib/cache'
 
 interface RouteParams {
   id: string
@@ -48,6 +49,7 @@ export const DELETE = withAuthTyped<RouteParams>(async (req, { userId }, params)
       where: { id: cubagemId },
     })
 
+    invalidateProdutoCache(userId)
     return NextResponse.json({ sucesso: true })
   } catch (error) {
     logger.error('Erro ao deletar cubagem:', error)

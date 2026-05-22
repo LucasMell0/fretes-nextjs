@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { withAuthTyped } from '@/lib/middleware/auth'
 import { parseRouteId } from '@/lib/utils/parse'
 import { verifyOwnership } from '@/lib/utils/ownership'
+import { invalidateRegiaoCache } from '@/lib/cache'
 
 interface RouteParams {
   id: string
@@ -92,6 +93,7 @@ export const PUT = withAuthTyped<RouteParams>(async (req, { userId }, params) =>
       data: validation.data,
     })
 
+    invalidateRegiaoCache(userId)
     return NextResponse.json(precoAtualizado)
   } catch (error) {
     logger.error('Erro ao atualizar preço:', error)
@@ -139,6 +141,7 @@ export const DELETE = withAuthTyped<RouteParams>(async (req, { userId }, params)
       where: { id: precoId },
     })
 
+    invalidateRegiaoCache(userId)
     return NextResponse.json({ sucesso: true })
   } catch (error) {
     logger.error('Erro ao excluir preço:', error)

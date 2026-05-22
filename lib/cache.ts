@@ -44,3 +44,21 @@ class MemoryCache {
 const globalForCache = globalThis as unknown as { memoryCache: MemoryCache | undefined }
 export const cache = globalForCache.memoryCache ?? new MemoryCache()
 globalForCache.memoryCache = cache
+
+/**
+ * Invalida o cache de produtos (e o cache de cotação derivado) de um usuário.
+ * Use ao alterar produto, cubagem custom ou variação.
+ */
+export function invalidateProdutoCache(usuarioId: number): void {
+  cache.invalidatePrefix(`produtos:${usuarioId}:`)
+  cache.invalidatePrefix(`cotacao:${usuarioId}:`)
+}
+
+/**
+ * Invalida o cache de regiões/transportadoras (e o cache de cotação derivado).
+ * Use ao alterar transportadora, região, preços, taxas ou kg adicional.
+ */
+export function invalidateRegiaoCache(usuarioId: number): void {
+  cache.invalidatePrefix(`regioes:${usuarioId}:`)
+  cache.invalidatePrefix(`cotacao:${usuarioId}:`)
+}

@@ -7,6 +7,7 @@ import { parseRouteId } from '@/lib/utils/parse'
 import { verifyOwnership } from '@/lib/utils/ownership'
 import { verificarSobreposicaoFaixa } from '@/lib/validators/faixa-peso.validator'
 import type { TransportadoraRegiaoWithRelations } from '@/lib/types/prisma-helpers'
+import { invalidateRegiaoCache } from '@/lib/cache'
 
 interface RouteParams {
   id: string
@@ -113,6 +114,7 @@ export const POST = withAuthTyped<RouteParams>(async (req, { userId }, params) =
       },
     })
 
+    invalidateRegiaoCache(userId)
     return NextResponse.json(preco, { status: 201 })
   } catch (error) {
     logger.error('Erro ao criar preço:', error)

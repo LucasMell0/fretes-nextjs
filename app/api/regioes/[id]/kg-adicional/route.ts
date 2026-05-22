@@ -6,6 +6,7 @@ import { withAuthTyped } from '@/lib/middleware/auth'
 import { parseRouteId } from '@/lib/utils/parse'
 import { verifyOwnership } from '@/lib/utils/ownership'
 import type { TransportadoraRegiaoWithKgAdicional } from '@/lib/types/prisma-helpers'
+import { invalidateRegiaoCache } from '@/lib/cache'
 
 interface RouteParams {
   id: string
@@ -62,6 +63,7 @@ export const PUT = withAuthTyped<RouteParams>(async (req, { userId }, params) =>
       })
     }
 
+    invalidateRegiaoCache(userId)
     return NextResponse.json(kgAdicional)
   } catch (error) {
     logger.error('Erro ao salvar KG adicional:', error)

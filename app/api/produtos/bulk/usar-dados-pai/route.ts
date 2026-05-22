@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
 import { withAuth } from '@/lib/middleware/auth'
+import { invalidateProdutoCache } from '@/lib/cache'
 
 /**
  * POST /api/produtos/bulk/usar-dados-pai
@@ -26,6 +27,7 @@ export const POST = withAuth(async (req, { userId }) => {
       data: { usarDadosPaiParaVariacoes: valor },
     })
 
+    invalidateProdutoCache(userId)
     return NextResponse.json({ success: true, atualizados: result.count, valor })
   } catch (error) {
     logger.error('Erro ao aplicar usar-dados-pai em massa:', error)

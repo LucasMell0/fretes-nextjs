@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { withAuth } from '@/lib/middleware/auth'
 import { verifyTransportadoraOwnership } from '@/lib/validators/relationship.validator'
 import { sanitizeTransform } from '@/lib/utils/sanitize'
+import { invalidateRegiaoCache } from '@/lib/cache'
 
 // OTIMIZADO: Cache de 30 segundos
 export const revalidate = 30
@@ -100,6 +101,7 @@ export const POST = withAuth(async (req, { userId }) => {
       },
     })
 
+    invalidateRegiaoCache(userId)
     return NextResponse.json(regiao, { status: 201 })
   } catch (error) {
     logger.error('Erro ao criar região:', error)

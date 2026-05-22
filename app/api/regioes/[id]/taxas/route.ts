@@ -6,6 +6,7 @@ import { withAuthTyped } from '@/lib/middleware/auth'
 import { parseRouteId } from '@/lib/utils/parse'
 import { verifyOwnership } from '@/lib/utils/ownership'
 import type { TransportadoraRegiaoWithTaxas } from '@/lib/types/prisma-helpers'
+import { invalidateRegiaoCache } from '@/lib/cache'
 
 interface RouteParams {
   id: string
@@ -156,6 +157,7 @@ export const PUT = withAuthTyped<RouteParams>(async (req, { userId }, params) =>
       })
     }
 
+    invalidateRegiaoCache(userId)
     return NextResponse.json(taxas)
   } catch (error) {
     logger.error('Erro ao salvar taxas:', error)

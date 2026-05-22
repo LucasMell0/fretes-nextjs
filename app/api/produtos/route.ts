@@ -4,6 +4,7 @@ import { logger } from '@/lib/logger'
 import { z } from 'zod'
 import { sanitizeTransform, sanitizeSKUTransform } from '@/lib/utils/sanitize'
 import { withAuth } from '@/lib/middleware/auth'
+import { invalidateProdutoCache } from '@/lib/cache'
 
 const produtoSchema = z.object({
   nome: z.string().min(3, 'Nome deve ter no mínimo 3 caracteres').transform(sanitizeTransform),
@@ -77,6 +78,7 @@ export const POST = withAuth(async (req, { userId }) => {
       }
     })
 
+    invalidateProdutoCache(userId)
     return NextResponse.json(produto, { status: 201 })
   } catch (error: unknown) {
     if (error instanceof Error && (error as Error & { code?: string }).code === 'P2002') {

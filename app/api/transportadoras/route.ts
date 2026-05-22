@@ -4,6 +4,7 @@ import { logger } from '@/lib/logger'
 import { z } from 'zod'
 import { withAuth } from '@/lib/middleware/auth'
 import { sanitizeTransform } from '@/lib/utils/sanitize'
+import { invalidateRegiaoCache } from '@/lib/cache'
 
 const transportadoraSchema = z.object({
   nome: z.string().min(1, 'Nome é obrigatório').transform(sanitizeTransform),
@@ -55,6 +56,7 @@ export const POST = withAuth(async (req, { userId }) => {
       }
     })
 
+    invalidateRegiaoCache(userId)
     return NextResponse.json(transportadora, { status: 201 })
   } catch (error) {
     logger.error('Erro ao criar transportadora:', error)

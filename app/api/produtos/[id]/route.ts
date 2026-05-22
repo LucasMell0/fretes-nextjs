@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { parseRouteId } from '@/lib/utils/parse'
 import { verifyOwnership } from '@/lib/utils/ownership'
 import { withAuthTyped } from '@/lib/middleware/auth'
+import { invalidateProdutoCache } from '@/lib/cache'
 
 const produtoSchema = z.object({
   nome: z.string().min(3).optional(),
@@ -87,6 +88,7 @@ export const PUT = withAuthTyped<RouteParams>(async (req, { userId }, params) =>
       data: validation.data,
     })
 
+    invalidateProdutoCache(userId)
     return NextResponse.json(updatedProduto)
   } catch (error: unknown) {
     if (error instanceof Error && (error as Error & { code?: string }).code === 'P2002') {
@@ -125,6 +127,7 @@ export const DELETE = withAuthTyped<RouteParams>(async (req, { userId }, params)
       where: { id: produtoId }
     })
 
+    invalidateProdutoCache(userId)
     return NextResponse.json({ sucesso: true })
   } catch (error) {
     logger.error('Erro ao deletar produto:', error)

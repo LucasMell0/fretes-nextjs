@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { parseRouteId } from '@/lib/utils/parse'
 import { verifyOwnership } from '@/lib/utils/ownership'
 import { withAuthTyped } from '@/lib/middleware/auth'
+import { invalidateRegiaoCache, invalidateProdutoCache } from '@/lib/cache'
 
 const transportadoraSchema = z.object({
   nome: z.string().min(3).optional(),
@@ -80,6 +81,8 @@ export const PUT = withAuthTyped<RouteParams>(async (req, { userId }, params) =>
       data: validation.data,
     })
 
+    invalidateRegiaoCache(userId)
+    invalidateProdutoCache(userId) // produtos têm cubagens por transportadora
     return NextResponse.json(updated)
   } catch (error) {
     logger.error('Erro ao atualizar transportadora:', error)
@@ -111,6 +114,8 @@ export const DELETE = withAuthTyped<RouteParams>(async (req, { userId }, params)
       where: { id: transportadoraId }
     })
 
+    invalidateRegiaoCache(userId)
+    invalidateProdutoCache(userId)
     return NextResponse.json({ sucesso: true })
   } catch (error) {
     logger.error('Erro ao deletar transportadora:', error)

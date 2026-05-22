@@ -7,6 +7,7 @@ import { parseRouteId } from '@/lib/utils/parse'
 import { verifyOwnership } from '@/lib/utils/ownership'
 import { verifyTransportadoraOwnership } from '@/lib/validators/relationship.validator'
 import { sanitizeTransform } from '@/lib/utils/sanitize'
+import { invalidateRegiaoCache } from '@/lib/cache'
 
 interface RouteParams {
   id: string
@@ -134,6 +135,7 @@ export const PUT = withAuthTyped<RouteParams>(async (req, { userId }, params) =>
       },
     })
 
+    invalidateRegiaoCache(userId)
     return NextResponse.json(updated)
   } catch (error) {
     logger.error('Erro ao atualizar região:', error)
@@ -166,6 +168,7 @@ export const DELETE = withAuthTyped<RouteParams>(async (req, { userId }, params)
       where: { id: regiaoId },
     })
 
+    invalidateRegiaoCache(userId)
     return NextResponse.json({ sucesso: true })
   } catch (error) {
     logger.error('Erro ao deletar região:', error)
