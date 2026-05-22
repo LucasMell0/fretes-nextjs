@@ -252,9 +252,9 @@ export class CotacaoService {
 
       // Produto pai e flag de herança
       const pai = produto.produtoPai as typeof produto | null
-      const usarDadosPadraosPai = pai && (pai as unknown as { usarDadosPaiParaVariacoes: boolean }).usarDadosPaiParaVariacoes
+      const usarDadosPadraosPai = !!(pai && (pai as unknown as { usarDadosPaiParaVariacoes: boolean }).usarDadosPaiParaVariacoes)
 
-      // Config por transportadora: SEMPRE herda do pai se o filho não tem (independente da flag)
+      // Config por transportadora: filho usa as do pai SOMENTE se a flag estiver marcada
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const configFilho = produto.cubagens.find((c: any) => c.transportadoraId === regiao.transportadoraId)
       const configPai = pai
@@ -262,11 +262,15 @@ export class CotacaoService {
         ? pai.cubagens.find((c: any) => c.transportadoraId === regiao.transportadoraId)
         : undefined
 
-      // Prioridade cubagem: config filho > config pai > cubagem filho (se > 0 ou flag desligada) > cubagem pai
+      // Prioridade cubagem:
+      // 1. config filho (sempre vence quando existe)
+      // 2. config pai (só se flag marcada)
+      // 3. cubagem padrão do filho (se > 0 ou flag desligada)
+      // 4. cubagem padrão do pai (fallback quando flag marcada e filho zerado)
       let cubagemM3: number
       if (configFilho?.cubagem != null) {
         cubagemM3 = Number(configFilho.cubagem)
-      } else if (configPai?.cubagem != null) {
+      } else if (usarDadosPadraosPai && configPai?.cubagem != null) {
         cubagemM3 = Number(configPai.cubagem)
       } else if (Number(produto.cubagem) > 0 || !usarDadosPadraosPai) {
         cubagemM3 = Number(produto.cubagem)
@@ -274,13 +278,13 @@ export class CotacaoService {
         cubagemM3 = Number(pai!.cubagem)
       }
 
-      // Prioridade peso: config filho > config pai > peso filho (se > 0 ou flag desligada) > peso pai
+      // Prioridade peso: mesmo critério da cubagem
       let pesoRealUnitario: number
       let fontePeso = ''
       if (configFilho?.peso != null) {
         pesoRealUnitario = Number(configFilho.peso)
         fontePeso = 'config_filho'
-      } else if (configPai?.peso != null) {
+      } else if (usarDadosPadraosPai && configPai?.peso != null) {
         pesoRealUnitario = Number(configPai.peso)
         fontePeso = 'config_pai'
       } else if (Number(produto.peso) > 0 || !usarDadosPadraosPai) {
