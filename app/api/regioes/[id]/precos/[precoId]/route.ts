@@ -65,9 +65,9 @@ export const PUT = withAuthTyped<RouteParams>(async (req, { userId }, params) =>
     const pesoInicial = validation.data.pesoInicial ?? Number(preco.pesoInicial)
     const pesoFinal = validation.data.pesoFinal ?? Number(preco.pesoFinal)
     
-    if (pesoFinal <= pesoInicial) {
+    if (pesoFinal < pesoInicial) {
       return NextResponse.json(
-        { erro: 'Peso final deve ser maior que peso inicial' },
+        { erro: 'Peso final não pode ser menor que peso inicial' },
         { status: 400 }
       )
     }

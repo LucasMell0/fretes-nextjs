@@ -83,10 +83,10 @@ export const POST = withAuthTyped<RouteParams>(async (req, { userId }, params) =
       )
     }
 
-    // Validar faixa de peso
-    if (validation.data.pesoFinal <= validation.data.pesoInicial) {
+    // Validar faixa de peso (permite faixa de ponto único, ex: 31-31)
+    if (validation.data.pesoFinal < validation.data.pesoInicial) {
       return NextResponse.json(
-        { erro: 'Peso final deve ser maior que peso inicial' },
+        { erro: 'Peso final não pode ser menor que peso inicial' },
         { status: 400 }
       )
     }

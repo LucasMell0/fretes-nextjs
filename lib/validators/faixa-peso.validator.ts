@@ -60,11 +60,11 @@ export function validarFaixasEmLote(faixas: FaixaPeso[]): { valido: boolean; men
   for (let i = 0; i < faixasOrdenadas.length; i++) {
     const faixaAtual = faixasOrdenadas[i]
 
-    // Verificar se peso final é maior que inicial
-    if (faixaAtual.pesoFinal <= faixaAtual.pesoInicial) {
+    // Peso final deve ser maior ou igual ao inicial (permite faixa de ponto único, ex: 31-31)
+    if (faixaAtual.pesoFinal < faixaAtual.pesoInicial) {
       return {
         valido: false,
-        mensagem: `Faixa inválida: peso final (${faixaAtual.pesoFinal}kg) deve ser maior que peso inicial (${faixaAtual.pesoInicial}kg)`,
+        mensagem: `Faixa inválida: peso final (${faixaAtual.pesoFinal}kg) não pode ser menor que peso inicial (${faixaAtual.pesoInicial}kg)`,
       }
     }
 

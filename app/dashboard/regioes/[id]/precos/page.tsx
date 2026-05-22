@@ -139,10 +139,10 @@ export default function PrecosPage() {
   }
 
   const salvar = async () => {
-    if (formData.pesoFinal <= formData.pesoInicial) {
+    if (formData.pesoFinal < formData.pesoInicial) {
       toast({
         variant: 'destructive',
-        title: 'Peso final deve ser maior que peso inicial',
+        title: 'Peso final não pode ser menor que peso inicial',
       })
       return
     }
