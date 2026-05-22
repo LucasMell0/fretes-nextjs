@@ -348,7 +348,7 @@ export default function VariacoesPage() {
           <h2 className="text-3xl font-bold">Variações de Produto</h2>
           <p className="text-muted-foreground mt-1">{produtoPai.nome}</p>
         </div>
-        <Button variant="outline" onClick={() => router.push('/dashboard/produtos')}>
+        <Button variant="outline" onClick={() => router.back()}>
           <ArrowLeft className="mr-2 h-4 w-4" />
           Voltar
         </Button>

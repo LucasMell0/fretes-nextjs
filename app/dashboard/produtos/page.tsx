@@ -24,7 +24,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Plus, Pencil, Trash2, Loader2, Package, Box, ChevronDown, ChevronRight, Search, X, Download, CheckCircle2, XCircle } from 'lucide-react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { usePagination } from '@/hooks/use-pagination'
 import { PaginationWrapper } from '@/components/ui/pagination-wrapper'
 import {
@@ -96,12 +96,17 @@ const matchBusca = (texto: string, query: string): boolean => {
 export default function ProdutosPage() {
   const { toast } = useToast()
   const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+
+  // Estado inicial vem da URL (?busca=foo&pagina=3&perPage=25)
+  // assim voltar de outras páginas (ex: /dashboard/produtos/[id]/cubagens) restaura o lugar.
   const [produtos, setProdutos] = useState<Produto[]>([])
   const [produtosExibir, setProdutosExibir] = useState<Produto[]>([])
   const [expandidos, setExpandidos] = useState<Set<number>>(new Set())
-  const [buscaTexto, setBuscaTexto] = useState('')
-  const [paginaAtual, setPaginaAtual] = useState(1)
-  const [itensPorPagina, setItensPorPagina] = useState(10)
+  const [buscaTexto, setBuscaTexto] = useState(searchParams.get('busca') || '')
+  const [paginaAtual, setPaginaAtual] = useState(Number(searchParams.get('pagina')) || 1)
+  const [itensPorPagina, setItensPorPagina] = useState(Number(searchParams.get('perPage')) || 10)
   const [aplicandoUsarDadosPai, setAplicandoUsarDadosPai] = useState(false)
   const [confirmUsarDadosPaiOpen, setConfirmUsarDadosPaiOpen] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -131,6 +136,19 @@ export default function ProdutosPage() {
   const [confirmDeleteMultipleOpen, setConfirmDeleteMultipleOpen] = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editando, setEditando] = useState<Produto | null>(null)
+
+  // Sincroniza estado de listagem com URL (usa replace para não poluir histórico)
+  useEffect(() => {
+    const params = new URLSearchParams()
+    if (buscaTexto) params.set('busca', buscaTexto)
+    if (paginaAtual !== 1) params.set('pagina', String(paginaAtual))
+    if (itensPorPagina !== 10) params.set('perPage', String(itensPorPagina))
+    const qs = params.toString()
+    const url = qs ? `${pathname}?${qs}` : pathname
+    if (url !== `${pathname}${window.location.search}`) {
+      router.replace(url, { scroll: false })
+    }
+  }, [buscaTexto, paginaAtual, itensPorPagina, pathname, router])
 
   const carregarProdutos = async () => {
     try {
