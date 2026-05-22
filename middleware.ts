@@ -6,6 +6,7 @@ const PUBLIC_API_ROUTES = [
   "/api/auth",           // NextAuth routes
   "/api/v1/cotacao",     // API pública (autenticada via token no body)
   "/api/v1/anymarket",   // Webhook autenticado via token na URL
+  "/api/v1/casa-imperial-hub", // Webhook autenticado via token na URL
   "/api/v1/erp-bling",   // Webhook autenticado via token na URL
   "/api/canais",         // Lista de canais disponíveis (público)
   "/api/transportadoras/modelo-csv", // Template CSV estático

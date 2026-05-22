@@ -50,6 +50,21 @@ export async function seedCanaisIntegracao() {
       }
     },
     {
+      nome: 'Casa Imperial Hub',
+      slug: 'casa-imperial-hub',
+      tipo: TipoCanal.MARKETPLACE,
+      logoUrl: '/logos/casa-imperial.png',
+      endpointPattern: '/api/v1/casa-imperial-hub/{token}',
+      metodosHttp: ['POST'],
+      payloadExemplo: {
+        zipCode: '01310100',
+        marketplace: 'Mercado Livre',
+        products: [
+          { sku: 'A1512', amount: 1, value: 149.90, height: 10, width: 20, length: 20, weight: 2 }
+        ]
+      }
+    },
+    {
       nome: 'Magalu',
       slug: 'magalu',
       tipo: TipoCanal.MARKETPLACE,
