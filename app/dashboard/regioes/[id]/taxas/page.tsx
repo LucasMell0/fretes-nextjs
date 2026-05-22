@@ -48,7 +48,9 @@ const TaxaCard = ({
   const tipoKey = `${prefixo}Tipo` as keyof typeof formData
   const valorKey = `${prefixo}Valor` as keyof typeof formData
   const minimoKey = `${prefixo}Minimo` as keyof typeof formData
-  
+
+  const isPercentual = formData[tipoKey] === 'PERCENTUAL'
+
   return (
     <Card className="p-4">
       <div className="flex items-center justify-between mb-4">
@@ -64,7 +66,7 @@ const TaxaCard = ({
           </div>
         )}
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className={`grid grid-cols-1 gap-4 ${isPercentual ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
         <div>
           <Label>Tipo</Label>
           <Select
@@ -82,27 +84,29 @@ const TaxaCard = ({
           </Select>
         </div>
         <div>
-          <Label>Valor {formData[tipoKey] === 'PERCENTUAL' ? '(%)' : '(R$)'}</Label>
+          <Label>Valor {isPercentual ? '(%)' : '(R$)'}</Label>
           <Input
             type="number"
-            step={formData[tipoKey] === 'PERCENTUAL' ? '0.01' : '0.01'}
+            step="0.01"
             min="0"
             value={formData[valorKey] as number}
             onChange={(e) => setFormData({ ...formData, [valorKey]: parseFloat(e.target.value) || 0 })}
             disabled={ativo === false}
           />
         </div>
-        <div>
-          <Label>Mínimo (R$)</Label>
-          <Input
-            type="number"
-            step="0.01"
-            min="0"
-            value={formData[minimoKey] as number}
-            onChange={(e) => setFormData({ ...formData, [minimoKey]: parseFloat(e.target.value) || 0 })}
-            disabled={ativo === false}
-          />
-        </div>
+        {isPercentual && (
+          <div>
+            <Label>Mínimo (R$)</Label>
+            <Input
+              type="number"
+              step="0.01"
+              min="0"
+              value={formData[minimoKey] as number}
+              onChange={(e) => setFormData({ ...formData, [minimoKey]: parseFloat(e.target.value) || 0 })}
+              disabled={ativo === false}
+            />
+          </div>
+        )}
       </div>
     </Card>
   )
