@@ -1,117 +1,46 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
-import { Card } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { useEffect, useState } from 'react'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Activity, CheckCircle2, XCircle, Percent, Loader2 } from 'lucide-react'
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { Calendar, TrendingUp, Loader2 } from 'lucide-react'
-import { formatCurrency, formatDate } from '@/lib/utils'
-import { usePagination } from '@/hooks/use-pagination'
-import { PaginationWrapper } from '@/components/ui/pagination-wrapper'
-import { DatePickerRange } from '@/components/ui/date-picker-range'
-import { type DateRange } from 'react-day-picker'
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { ChartCotacoesInteractive } from '@/components/dashboard/chart-cotacoes-interactive'
+import { MapaBrasil } from '@/components/relatorios/mapa-brasil'
 
-interface CotacaoLog {
-  id: number
-  cep: string
-  origem: string
-  marketplace: string | null
-  melhorValor: number | null
-  melhorPrazo: number | null
-  totalTransportadoras: number
-  dataCotacao: string
-  melhorTransportadora: {
-    nome: string
-  } | null
+interface RelatorioStats {
+  periodo: { dias: number; inicio: string; fim: string }
+  cards: {
+    totalRequisicoes: number
+    sucesso: number
+    erro: number
+    taxaSucesso: number
+    totalCotacoes: number
+  }
+  grafico: Array<{ data: string; cotacoes: number }>
+  porEstado: Array<{ uf: string; total: number }>
+  cotacoesSemEstado: number
 }
 
 export default function RelatoriosPage() {
-  const [cotacoes, setCotacoes] = useState<CotacaoLog[]>([])
+  const [stats, setStats] = useState<RelatorioStats | null>(null)
   const [loading, setLoading] = useState(true)
-  const [filtroData, setFiltroData] = useState<DateRange | undefined>(undefined)
-  const [filtroCep, setFiltroCep] = useState('')
-
-  const aplicarMascaraCep = (valor: string) => {
-    const apenasNumeros = valor.replace(/\D/g, '')
-    if (apenasNumeros.length <= 5) {
-      return apenasNumeros
-    }
-    return `${apenasNumeros.slice(0, 5)}-${apenasNumeros.slice(5, 8)}`
-  }
-
-  const handleCepChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const valorComMascara = aplicarMascaraCep(e.target.value)
-    setFiltroCep(valorComMascara)
-  }
+  const [dias, setDias] = useState<string>('7')
 
   useEffect(() => {
-    carregarCotacoes()
-  }, [])
+    setLoading(true)
+    fetch(`/api/relatorios/stats?dias=${dias}`)
+      .then(r => r.json())
+      .then(data => { setStats(data); setLoading(false) })
+      .catch(err => { console.error(err); setLoading(false) })
+  }, [dias])
 
-  const carregarCotacoes = async () => {
-    try {
-      const res = await fetch('/api/cotacoes')
-      const data = await res.json()
-      setCotacoes(data)
-    } catch (error) {
-      console.error('Erro ao carregar cotações')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // OTIMIZADO: Memoizar filtros para evitar recálculo a cada render
-  const cotacoesFiltradas = useMemo(() => cotacoes.filter((c) => {
-    if (filtroData?.from) {
-      const cotacaoDate = new Date(c.dataCotacao)
-      // Remove horas para comparação apenas de datas
-      cotacaoDate.setHours(0, 0, 0, 0)
-      const fromDate = new Date(filtroData.from)
-      fromDate.setHours(0, 0, 0, 0)
-      
-      if (cotacaoDate < fromDate) return false
-      
-      if (filtroData.to) {
-        const toDate = new Date(filtroData.to)
-        toDate.setHours(23, 59, 59, 999)
-        if (cotacaoDate > toDate) return false
-      }
-    }
-    if (filtroCep) {
-      const cepFiltroLimpo = filtroCep.replace(/\D/g, '')
-      const cepCotacaoLimpo = c.cep.replace(/\D/g, '')
-      if (!cepCotacaoLimpo.includes(cepFiltroLimpo)) return false
-    }
-    return true
-  }), [cotacoes, filtroData, filtroCep])
-
-  const pagination = usePagination(cotacoesFiltradas, 15)
-
-  // OTIMIZADO: Memoizar cálculos estatísticos
-  const stats = useMemo(() => {
-    const total = cotacoesFiltradas.length
-    const valorTotal = cotacoesFiltradas.reduce((acc, c) => acc + (Number(c.melhorValor) || 0), 0)
-    const valorMedio = total > 0 ? valorTotal / total : 0
-    
-    // Calcular cotações de hoje uma única vez
-    const hoje = new Date().toDateString()
-    const cotacoesHoje = cotacoes.filter(c => 
-      new Date(c.dataCotacao).toDateString() === hoje
-    ).length
-    
-    return { total, valorMedio, cotacoesHoje }
-  }, [cotacoesFiltradas, cotacoes])
-
-  if (loading) {
+  if (loading && !stats) {
     return (
       <div className="flex items-center justify-center h-96">
         <Loader2 className="h-8 w-8 animate-spin" />
@@ -119,123 +48,121 @@ export default function RelatoriosPage() {
     )
   }
 
+  if (!stats?.cards) {
+    return (
+      <div className="p-6">
+        <p className="text-muted-foreground">Erro ao carregar relatório.</p>
+      </div>
+    )
+  }
+
   return (
-    <div className="p-6">
-      <div className="mb-6">
-        <h2 className="text-3xl font-bold">Relatórios e Histórico</h2>
-        <p className="text-muted-foreground">Visualize o histórico de cotações realizadas</p>
-      </div>
-
-      <div className="grid gap-6 md:grid-cols-3 mb-6">
-        <Card className="p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">Total de Cotações</p>
-              <p className="text-3xl font-bold">{stats.total}</p>
-            </div>
-            <Calendar className="h-8 w-8 text-primary" />
-          </div>
-        </Card>
-
-        <Card className="p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">Valor Médio</p>
-              <p className="text-3xl font-bold">{formatCurrency(stats.valorMedio)}</p>
-            </div>
-            <TrendingUp className="h-8 w-8 text-primary" />
-          </div>
-        </Card>
-
-        <Card className="p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">Hoje</p>
-              <p className="text-3xl font-bold">{stats.cotacoesHoje}</p>
-            </div>
-            <Calendar className="h-8 w-8 text-primary" />
-          </div>
-        </Card>
-      </div>
-
-      <Card className="mb-6 p-4">
-        <div className="grid gap-4 md:grid-cols-2">
-          <div>
-            <Label htmlFor="filtroData">Filtrar por Período</Label>
-            <DatePickerRange
-              date={filtroData}
-              onDateChange={setFiltroData}
-              placeholder="Selecione um período"
-            />
-          </div>
-          <div>
-            <Label htmlFor="filtroCep">Filtrar por CEP</Label>
-            <Input
-              id="filtroCep"
-              placeholder="00000-000"
-              value={filtroCep}
-              onChange={handleCepChange}
-              maxLength={9}
-            />
-          </div>
+    <div className="p-6 space-y-6">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h2 className="text-3xl font-bold">Relatórios</h2>
+          <p className="text-muted-foreground">
+            Análise de requisições e cotações nos últimos {stats.periodo.dias} dias
+          </p>
         </div>
-      </Card>
+        <Select value={dias} onValueChange={setDias}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="7">Últimos 7 dias</SelectItem>
+            <SelectItem value="30">Últimos 30 dias</SelectItem>
+            <SelectItem value="90">Últimos 90 dias</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
 
-      <Card>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Data</TableHead>
-              <TableHead>CEP</TableHead>
-              <TableHead>Origem</TableHead>
-              <TableHead>Melhor Transportadora</TableHead>
-              <TableHead>Valor</TableHead>
-              <TableHead>Prazo</TableHead>
-              <TableHead>Opções</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {cotacoesFiltradas.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                  Nenhuma cotação encontrada
-                </TableCell>
-              </TableRow>
-            ) : (
-              pagination.paginatedItems.map((cotacao) => (
-                <TableRow key={cotacao.id}>
-                  <TableCell>{formatDate(new Date(cotacao.dataCotacao))}</TableCell>
-                  <TableCell className="font-mono">{cotacao.cep}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{cotacao.origem}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    {cotacao.melhorTransportadora?.nome || '-'}
-                  </TableCell>
-                  <TableCell className="font-semibold text-primary">
-                    {cotacao.melhorValor ? formatCurrency(Number(cotacao.melhorValor)) : '-'}
-                  </TableCell>
-                  <TableCell>{cotacao.melhorPrazo ? `${cotacao.melhorPrazo} dias` : '-'}</TableCell>
-                  <TableCell>
-                    <Badge>{cotacao.totalTransportadoras} opções</Badge>
-                  </TableCell>
-                </TableRow>
-              ))
+      {/* Stats cards */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total de Requisições</CardTitle>
+            <Activity className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.cards.totalRequisicoes.toLocaleString('pt-BR')}</div>
+            <p className="text-xs text-muted-foreground">no período</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Sucesso (2xx)</CardTitle>
+            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-emerald-500">{stats.cards.sucesso.toLocaleString('pt-BR')}</div>
+            <p className="text-xs text-muted-foreground">respostas com sucesso</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Erro (4xx/5xx)</CardTitle>
+            <XCircle className="h-4 w-4 text-destructive" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-destructive">{stats.cards.erro.toLocaleString('pt-BR')}</div>
+            <p className="text-xs text-muted-foreground">respostas com erro</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Taxa de Sucesso</CardTitle>
+            <Percent className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.cards.taxaSucesso}%</div>
+            <p className="text-xs text-muted-foreground">
+              {stats.cards.totalCotacoes.toLocaleString('pt-BR')} cotações realizadas
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Gráfico de cotações por dia (reutilizado da dashboard) */}
+      <ChartCotacoesInteractive data={stats.grafico} />
+
+      {/* Mapa do Brasil */}
+      <MapaBrasil data={stats.porEstado} />
+
+      {/* Top 5 estados em lista */}
+      {stats.porEstado.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Top 5 estados</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {stats.porEstado.slice(0, 5).map((e, idx) => {
+                const max = stats.porEstado[0].total || 1
+                const pct = (e.total / max) * 100
+                return (
+                  <div key={e.uf} className="flex items-center gap-3">
+                    <span className="text-xs text-muted-foreground w-6">#{idx + 1}</span>
+                    <span className="font-semibold w-12 text-sm">{e.uf}</span>
+                    <div className="flex-1 bg-muted h-2 rounded overflow-hidden">
+                      <div className="h-full bg-primary" style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className="font-mono text-sm w-12 text-right">{e.total}</span>
+                  </div>
+                )
+              })}
+            </div>
+            {stats.cotacoesSemEstado > 0 && (
+              <p className="text-xs text-muted-foreground mt-4">
+                {stats.cotacoesSemEstado} cotação(ões) sem CEP reconhecido (não computadas no mapa).
+              </p>
             )}
-          </TableBody>
-        </Table>
-      </Card>
-
-      <PaginationWrapper
-        currentPage={pagination.currentPage}
-        totalPages={pagination.totalPages}
-        onPageChange={pagination.changePage}
-        generatePageNumbers={pagination.generatePageNumbers}
-        startIndex={pagination.startIndex}
-        endIndex={pagination.endIndex}
-        totalItems={cotacoesFiltradas.length}
-        itemName="cotações"
-      />
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }
