@@ -61,16 +61,16 @@ export function MapaBrasil({ data }: MapaBrasilProps) {
       <CardContent>
         <div className="flex flex-col lg:flex-row gap-6">
           {/* Mapa SVG real */}
-          <div className="flex-1 relative">
+          <div className="relative mx-auto" style={{ maxWidth: 340 }}>
             <ComposableMap
               projection="geoMercator"
               projectionConfig={{
-                scale: 700,
+                scale: 480,
                 center: [-54, -15],
               }}
-              width={500}
-              height={500}
-              style={{ width: '100%', height: 'auto' }}
+              width={340}
+              height={340}
+              style={{ width: '100%', height: 'auto', display: 'block' }}
             >
               <Geographies geography={GEO_URL}>
                 {({ geographies }) =>
