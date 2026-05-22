@@ -26,6 +26,7 @@ import {
 import { Plus, Pencil, Trash2, Loader2, Package, Box, ChevronDown, ChevronRight, Search, X, Download, CheckCircle2, XCircle } from 'lucide-react'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { usePagination } from '@/hooks/use-pagination'
+import { CubagensModal } from '@/components/produtos/cubagens-modal'
 import { PaginationWrapper } from '@/components/ui/pagination-wrapper'
 import {
   Pagination,
@@ -109,6 +110,7 @@ export default function ProdutosPage() {
   const [itensPorPagina, setItensPorPagina] = useState(Number(searchParams.get('perPage')) || 10)
   const [aplicandoUsarDadosPai, setAplicandoUsarDadosPai] = useState(false)
   const [confirmUsarDadosPaiOpen, setConfirmUsarDadosPaiOpen] = useState(false)
+  const [cubagensProdutoId, setCubagensProdutoId] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [dialogImportacao, setDialogImportacao] = useState(false)
   const [importando, setImportando] = useState(false)
@@ -763,7 +765,7 @@ export default function ProdutosPage() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => router.push(`/dashboard/produtos/${p.id}/cubagens`)}
+                      onClick={() => setCubagensProdutoId(p.id)}
                       title="Cubagens por Transportadora"
                     >
                       <Box className="h-4 w-4 text-primary" />
@@ -834,7 +836,7 @@ export default function ProdutosPage() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => router.push(`/dashboard/produtos/${variacao.id}/cubagens`)}
+                        onClick={() => setCubagensProdutoId(variacao.id)}
                         title="Cubagens por Transportadora"
                       >
                         <Box className="h-4 w-4 text-primary" />
@@ -1078,6 +1080,13 @@ export default function ProdutosPage() {
         description="Isso ativa a opção 'usar dados do pai para variações' em TODOS os produtos cadastrados. Confirma?"
         confirmText="Aplicar em todos"
         cancelText="Cancelar"
+      />
+
+      <CubagensModal
+        produtoId={cubagensProdutoId}
+        open={cubagensProdutoId !== null}
+        onOpenChange={(open) => { if (!open) setCubagensProdutoId(null) }}
+        onChanged={carregarProdutos}
       />
 
       {/* Dialog de Importação do Bling */}
