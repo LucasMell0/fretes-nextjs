@@ -23,11 +23,20 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Plus, Pencil, Trash2, Loader2, Package, Box, ChevronDown, ChevronRight, Search, X, Download, CheckCircle2, XCircle } from 'lucide-react'
+import { Plus, Pencil, Trash2, Loader2, Package, Box, ChevronDown, ChevronRight, Search, X, Download, CheckCircle2, XCircle, MoreHorizontal, Settings2, Weight } from 'lucide-react'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { usePagination } from '@/hooks/use-pagination'
 import { CubagensModal } from '@/components/produtos/cubagens-modal'
 import { BulkCubagensModal } from '@/components/produtos/bulk-cubagens-modal'
+import { BulkPesoCubagemModal } from '@/components/produtos/bulk-peso-cubagem-modal'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu'
 import { PaginationWrapper } from '@/components/ui/pagination-wrapper'
 import {
   Pagination,
@@ -113,6 +122,7 @@ export default function ProdutosPage() {
   const [confirmUsarDadosPaiOpen, setConfirmUsarDadosPaiOpen] = useState(false)
   const [cubagensProdutoId, setCubagensProdutoId] = useState<number | null>(null)
   const [bulkCubagensOpen, setBulkCubagensOpen] = useState(false)
+  const [bulkPesoCubagemOpen, setBulkPesoCubagemOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [dialogImportacao, setDialogImportacao] = useState(false)
   const [importando, setImportando] = useState(false)
@@ -633,44 +643,111 @@ export default function ProdutosPage() {
           <p className="text-muted-foreground">Gerencie os produtos cadastrados</p>
         </div>
         <div className="flex gap-2">
-          {produtosTabelaSelecionados.size > 0 && (
-            <>
-              <Button
-                variant="outline"
-                onClick={() => setBulkCubagensOpen(true)}
-              >
-                <Box className="mr-2 h-4 w-4" />
-                Editar cubagens em lote ({produtosTabelaSelecionados.size})
+          {/* Menu "Mais ações" — ações globais raras */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline">
+                <MoreHorizontal className="mr-2 h-4 w-4" />
+                Mais ações
               </Button>
-              <Button
-                variant="destructive"
-                onClick={() => setConfirmDeleteMultipleOpen(true)}
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64">
+              <DropdownMenuLabel>Importação</DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => setDialogImportacao(true)} className="cursor-pointer">
+                <Download className="mr-2 h-4 w-4" />
+                Importar do Bling
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>Configurações globais</DropdownMenuLabel>
+              <DropdownMenuItem
+                onClick={() => setConfirmUsarDadosPaiOpen(true)}
+                disabled={aplicandoUsarDadosPai}
+                className="cursor-pointer"
               >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Deletar Selecionados ({produtosTabelaSelecionados.size})
-              </Button>
-            </>
-          )}
-          <Button
-            variant="outline"
-            onClick={() => setConfirmUsarDadosPaiOpen(true)}
-            disabled={aplicandoUsarDadosPai}
-          >
-            {aplicandoUsarDadosPai
-              ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              : <CheckCircle2 className="mr-2 h-4 w-4" />}
-            Aplicar &quot;usar dados do pai&quot; em todos
-          </Button>
-          <Button variant="outline" onClick={() => setDialogImportacao(true)}>
-            <Download className="mr-2 h-4 w-4" />
-            Importar do Bling
-          </Button>
+                {aplicandoUsarDadosPai
+                  ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  : <CheckCircle2 className="mr-2 h-4 w-4" />}
+                Aplicar &quot;usar dados do pai&quot; em todos
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           <Button onClick={abrirDialogNovo}>
             <Plus className="mr-2 h-4 w-4" />
             Novo Produto
           </Button>
         </div>
       </div>
+
+      {/* Selection Bar — aparece quando há produtos selecionados */}
+      {produtosTabelaSelecionados.size > 0 && (
+        <div className="mb-6 flex items-center justify-between gap-4 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 animate-in fade-in slide-in-from-top-1 duration-200">
+          <div className="flex items-center gap-3">
+            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-semibold">
+              {produtosTabelaSelecionados.size}
+            </div>
+            <span className="text-sm font-medium">
+              produto(s) selecionado(s)
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <Settings2 className="mr-2 h-4 w-4" />
+                  Editar em lote
+                  <ChevronDown className="ml-2 h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-72">
+                <DropdownMenuLabel>Configuração padrão do produto</DropdownMenuLabel>
+                <DropdownMenuItem
+                  onClick={() => setBulkPesoCubagemOpen(true)}
+                  className="cursor-pointer"
+                >
+                  <Weight className="mr-2 h-4 w-4" />
+                  <div className="flex flex-col">
+                    <span>Peso / cubagem padrão</span>
+                    <span className="text-xs text-muted-foreground">Aplicado a todas transportadoras</span>
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel>Configuração por transportadora</DropdownMenuLabel>
+                <DropdownMenuItem
+                  onClick={() => setBulkCubagensOpen(true)}
+                  className="cursor-pointer"
+                >
+                  <Box className="mr-2 h-4 w-4" />
+                  <div className="flex flex-col">
+                    <span>Cubagens personalizadas</span>
+                    <span className="text-xs text-muted-foreground">Específico por transportadora</span>
+                  </div>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setConfirmDeleteMultipleOpen(true)}
+              className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Deletar
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setProdutosTabelaSelecionados(new Set())}
+              title="Limpar seleção"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Campo de Busca */}
       <div className="mb-6">
@@ -1108,6 +1185,16 @@ export default function ProdutosPage() {
         produtoIds={Array.from(produtosTabelaSelecionados)}
         open={bulkCubagensOpen}
         onOpenChange={setBulkCubagensOpen}
+        onSuccess={() => {
+          setProdutosTabelaSelecionados(new Set())
+          carregarProdutos()
+        }}
+      />
+
+      <BulkPesoCubagemModal
+        produtoIds={Array.from(produtosTabelaSelecionados)}
+        open={bulkPesoCubagemOpen}
+        onOpenChange={setBulkPesoCubagemOpen}
         onSuccess={() => {
           setProdutosTabelaSelecionados(new Set())
           carregarProdutos()
