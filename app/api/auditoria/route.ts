@@ -23,7 +23,11 @@ export const GET = withAuth(async (req, { userId }) => {
     where.status = status
   }
 
-  const [registros, total] = await Promise.all([
+  // Counts globais (ignoram filtro de status pra montar os cards)
+  const baseWhere: Record<string, unknown> = { usuarioId: userId }
+  if (tipo) baseWhere.tipo = tipo
+
+  const [registros, total, totalPendentes, totalResolvidos] = await Promise.all([
     prisma.auditoriaCotacao.findMany({
       where,
       include: {
@@ -41,48 +45,51 @@ export const GET = withAuth(async (req, { userId }) => {
       take: limit,
     }),
     prisma.auditoriaCotacao.count({ where }),
+    prisma.auditoriaCotacao.count({ where: { ...baseWhere, status: 'PENDENTE' } }),
+    prisma.auditoriaCotacao.count({ where: { ...baseWhere, status: 'RESOLVIDO' } }),
   ])
 
   return NextResponse.json({
     registros,
     total,
+    totalPendentes,
+    totalResolvidos,
     pagina: page,
     totalPaginas: Math.ceil(total / limit),
   })
 })
 
 /**
- * PATCH /api/auditoria - Atualiza status de um registro
+ * PATCH /api/auditoria - Atualiza status (individual ou em lote)
+ *
+ * Body individual: { id: number, status: 'PENDENTE' | 'RESOLVIDO' }
+ * Body lote:       { ids: number[], status: 'PENDENTE' | 'RESOLVIDO' }
  */
 export const PATCH = withAuth(async (req, { userId }) => {
   const body = await req.json()
-  const { id, status } = body
+  const { id, ids, status } = body
 
-  if (!id || !status || !['PENDENTE', 'RESOLVIDO'].includes(status)) {
+  if (!status || !['PENDENTE', 'RESOLVIDO'].includes(status)) {
     return NextResponse.json(
-      { erro: 'ID e status (PENDENTE ou RESOLVIDO) são obrigatórios' },
+      { erro: 'status (PENDENTE ou RESOLVIDO) é obrigatório' },
       { status: 400 }
     )
   }
 
-  const registro = await prisma.auditoriaCotacao.findFirst({
-    where: { id, usuarioId: userId },
-  })
+  const idsAlvo: number[] = Array.isArray(ids) ? ids.filter(n => Number.isInteger(n)) : (id ? [id] : [])
 
-  if (!registro) {
-    return NextResponse.json(
-      { erro: 'Registro não encontrado' },
-      { status: 404 }
-    )
+  if (idsAlvo.length === 0) {
+    return NextResponse.json({ erro: 'Informe id ou ids' }, { status: 400 })
   }
 
-  const atualizado = await prisma.auditoriaCotacao.update({
-    where: { id },
+  // updateMany já filtra por usuarioId — IDs de outros tenants são ignorados silenciosamente
+  const result = await prisma.auditoriaCotacao.updateMany({
+    where: { id: { in: idsAlvo }, usuarioId: userId },
     data: {
       status,
       resolvidoEm: status === 'RESOLVIDO' ? new Date() : null,
     },
   })
 
-  return NextResponse.json(atualizado)
+  return NextResponse.json({ atualizados: result.count })
 })

@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useToast } from '@/components/ui/use-toast'
+import { Checkbox } from '@/components/ui/checkbox'
 import { AlertTriangle, PackageX, MapPinOff, Loader2, CheckCircle2, Clock } from 'lucide-react'
 
 interface AuditoriaRegistro {
@@ -46,6 +47,8 @@ interface AuditoriaRegistro {
 interface AuditoriaResponse {
   registros: AuditoriaRegistro[]
   total: number
+  totalPendentes: number
+  totalResolvidos: number
   pagina: number
   totalPaginas: number
 }
@@ -58,6 +61,8 @@ export default function AuditoriaPage() {
   const [filtroStatus, setFiltroStatus] = useState<string>('todos')
   const [pagina, setPagina] = useState(1)
   const [atualizandoId, setAtualizandoId] = useState<number | null>(null)
+  const [selecionados, setSelecionados] = useState<Set<number>>(new Set())
+  const [resolvendoLote, setResolvendoLote] = useState(false)
 
   const carregarDados = async () => {
     setLoading(true)
@@ -85,6 +90,54 @@ export default function AuditoriaPage() {
     carregarDados()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pagina, filtroTipo, filtroStatus])
+
+  const toggleSelecionado = (id: number) => {
+    setSelecionados(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const togglePendentesDaPagina = () => {
+    const pendentesDaPagina = data?.registros.filter(r => r.status === 'PENDENTE').map(r => r.id) || []
+    const todosJaMarcados = pendentesDaPagina.every(id => selecionados.has(id))
+    setSelecionados(prev => {
+      const next = new Set(prev)
+      if (todosJaMarcados) {
+        pendentesDaPagina.forEach(id => next.delete(id))
+      } else {
+        pendentesDaPagina.forEach(id => next.add(id))
+      }
+      return next
+    })
+  }
+
+  const resolverSelecionados = async () => {
+    const ids = Array.from(selecionados)
+    if (ids.length === 0) return
+    setResolvendoLote(true)
+    try {
+      const res = await fetch('/api/auditoria', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids, status: 'RESOLVIDO' }),
+      })
+      if (res.ok) {
+        const json = await res.json()
+        toast({ title: `${json.atualizados} registro(s) resolvido(s)` })
+        setSelecionados(new Set())
+        carregarDados()
+      } else {
+        toast({ variant: 'destructive', title: 'Erro ao resolver em lote' })
+      }
+    } catch {
+      toast({ variant: 'destructive', title: 'Erro ao resolver em lote' })
+    } finally {
+      setResolvendoLote(false)
+    }
+  }
 
   const atualizarStatus = async (id: number, novoStatus: 'PENDENTE' | 'RESOLVIDO') => {
     setAtualizandoId(id)
@@ -126,7 +179,8 @@ export default function AuditoriaPage() {
     })
   }
 
-  const totalPendentes = data?.registros.filter(r => r.status === 'PENDENTE').length || 0
+  const totalPendentes = data?.totalPendentes ?? 0
+  const totalResolvidos = data?.totalResolvidos ?? 0
 
   if (loading && !data) {
     return (
@@ -138,9 +192,22 @@ export default function AuditoriaPage() {
 
   return (
     <div className="p-6">
-      <div className="mb-6">
-        <h2 className="text-3xl font-bold">Auditoria</h2>
-        <p className="text-muted-foreground">Cotações que não puderam ser realizadas</p>
+      <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h2 className="text-3xl font-bold">Auditoria</h2>
+          <p className="text-muted-foreground">Cotações que não puderam ser realizadas</p>
+        </div>
+        {selecionados.size > 0 && (
+          <Button
+            onClick={resolverSelecionados}
+            disabled={resolvendoLote}
+          >
+            {resolvendoLote
+              ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              : <CheckCircle2 className="mr-2 h-4 w-4" />}
+            Resolver Selecionados ({selecionados.size})
+          </Button>
+        )}
       </div>
 
       {/* Cards de resumo */}
@@ -174,7 +241,7 @@ export default function AuditoriaPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-emerald-500">
-              {(data?.total || 0) - totalPendentes}
+              {totalResolvidos}
             </div>
             <p className="text-xs text-muted-foreground">Problemas corrigidos</p>
           </CardContent>
@@ -219,6 +286,16 @@ export default function AuditoriaPage() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox
+                    checked={(() => {
+                      const pend = data?.registros.filter(r => r.status === 'PENDENTE') || []
+                      return pend.length > 0 && pend.every(r => selecionados.has(r.id))
+                    })()}
+                    onCheckedChange={togglePendentesDaPagina}
+                    aria-label="Selecionar todos os pendentes da página"
+                  />
+                </TableHead>
                 <TableHead>Tipo</TableHead>
                 <TableHead>Descrição</TableHead>
                 <TableHead>CEP</TableHead>
@@ -232,13 +309,21 @@ export default function AuditoriaPage() {
             <TableBody>
               {data?.registros.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                     Nenhum registro de auditoria encontrado
                   </TableCell>
                 </TableRow>
               ) : (
                 data?.registros.map((registro) => (
                   <TableRow key={registro.id}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selecionados.has(registro.id)}
+                        onCheckedChange={() => toggleSelecionado(registro.id)}
+                        disabled={registro.status === 'RESOLVIDO'}
+                        aria-label={`Selecionar registro ${registro.id}`}
+                      />
+                    </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         {registro.tipo === 'SKU_NAO_ENCONTRADO' ? (
