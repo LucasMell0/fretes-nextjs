@@ -97,7 +97,8 @@ interface AppSidebarProps {
 
 export function AppSidebar({ user }: AppSidebarProps) {
   const pathname = usePathname()
-  const { theme, setTheme } = useTheme()
+  // resolvedTheme retorna sempre 'light' ou 'dark' (theme pode ser 'system')
+  const { resolvedTheme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
@@ -105,7 +106,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
   }, [])
 
   const toggleTheme = () => {
-    setTheme(theme === "dark" ? "light" : "dark")
+    setTheme(resolvedTheme === "dark" ? "light" : "dark")
   }
 
   return (
@@ -226,12 +227,12 @@ export function AppSidebar({ user }: AppSidebarProps) {
                 <DropdownMenuSeparator />
                 {mounted && (
                   <DropdownMenuItem onClick={toggleTheme} className="cursor-pointer">
-                    {theme === "dark" ? (
+                    {resolvedTheme === "dark" ? (
                       <Sun className="mr-2 h-4 w-4" />
                     ) : (
                       <Moon className="mr-2 h-4 w-4" />
                     )}
-                    <span>{theme === "dark" ? "Modo Claro" : "Modo Escuro"}</span>
+                    <span>{resolvedTheme === "dark" ? "Modo Claro" : "Modo Escuro"}</span>
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuSeparator />
