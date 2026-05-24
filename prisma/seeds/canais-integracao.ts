@@ -57,10 +57,17 @@ export async function seedCanaisIntegracao() {
       endpointPattern: '/api/v1/casa-imperial-hub/{token}',
       metodosHttp: ['POST'],
       payloadExemplo: {
-        zipCode: '01310100',
-        marketplace: 'Mercado Livre',
-        products: [
-          { sku: 'A1512', amount: 1, value: 149.90, height: 10, width: 20, length: 20, weight: 2 }
+        cep: '01310100',
+        store_id: 'str_xxx',
+        items: [
+          { sku: 'A1512', qty: 2, price_cents: 49900, weight_kg: 12.5, length_cm: 80, width_cm: 60, height_cm: 40 }
+        ]
+      },
+      responseExemplo: {
+        ok: true,
+        options: [
+          { id: 'normal', name: 'Transportadora X', price_cents: 4990, eta_days: 7 },
+          { id: 'expressa', name: 'Transportadora Y', price_cents: 8990, eta_days: 3 }
         ]
       }
     },

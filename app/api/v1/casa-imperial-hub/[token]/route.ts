@@ -10,40 +10,53 @@ import { cache } from '@/lib/cache'
  *
  * Endpoint: POST /api/v1/casa-imperial-hub/{token}
  *
- * Mesmo contrato da integração Anymarket.
- *
  * Request:
  * {
- *   "zipCode": "87100000",
- *   "marketplace": "Mercado Livre",
- *   "products": [
+ *   "cep": "01310100",
+ *   "store_id": "str_xxx",
+ *   "items": [
  *     {
  *       "sku": "A1512",
- *       "height": 10,
- *       "width": 20,
- *       "weight": 20,
- *       "length": 20,
- *       "amount": 1,
- *       "value": 149.90
+ *       "qty": 2,
+ *       "price_cents": 49900,
+ *       "weight_kg": 12.5,
+ *       "length_cm": 80,
+ *       "width_cm": 60,
+ *       "height_cm": 40
  *     }
  *   ]
  * }
  *
- * Response:
+ * Response (sucesso):
  * {
- *   "items": [
- *     {
- *       "serviceName": "Transporte Terrestre",
- *       "carrierName": "Transportadora X",
- *       "deliveryTime": 12,
- *       "price": 23.99,
- *       "freightType": "NORMAL"
- *     }
+ *   "ok": true,
+ *   "options": [
+ *     { "id": "normal",   "name": "Transportadora X",  "price_cents": 4990, "eta_days": 7 },
+ *     { "id": "expressa", "name": "Transportadora Y",  "price_cents": 8990, "eta_days": 3 }
  *   ]
  * }
+ *
+ * Response (erro):
+ * { "ok": false, "error": "Fora da área de entrega" }
  */
 
 const CANAL_NOME = 'Casa Imperial Hub'
+
+interface CasaImperialItem {
+  sku: string | number
+  qty: number
+  price_cents?: number
+  weight_kg?: number
+  length_cm?: number
+  width_cm?: number
+  height_cm?: number
+}
+
+interface CasaImperialRequest {
+  cep: string
+  store_id?: string
+  items: CasaImperialItem[]
+}
 
 export async function POST(
   request: NextRequest,
@@ -51,8 +64,7 @@ export async function POST(
 ) {
   const inicio = Date.now()
   let integracao: { id: number; ativo: boolean; usuarioId: number } | null = null
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let requestBody: any = null
+  let requestBody: CasaImperialRequest | null = null
 
   try {
     // Rate limiting por token: 60 requisições por minuto
@@ -69,7 +81,7 @@ export async function POST(
 
     const { token } = params
 
-    // 1. Validar token (cache de 5 minutos)
+    // 1. Validar token (cache de 5min)
     const tokenCacheKey = `token:${token}`
     integracao = await cache.get(tokenCacheKey)
     if (!integracao) {
@@ -83,56 +95,55 @@ export async function POST(
     }
 
     if (!integracao || !integracao.ativo) {
-      await salvarLog(null, request, 401, 'Invalid or inactive token', Date.now() - inicio)
+      await salvarLog(null, request, 401, { ok: false, error: 'Token inválido ou inativo' }, Date.now() - inicio)
       return NextResponse.json(
-        { error: 'Invalid or inactive token' },
+        { ok: false, error: 'Token inválido ou inativo' },
         { status: 401 }
       )
     }
 
     // 2. Parse e validar input
-    const body = await request.json()
+    const body = await request.json() as CasaImperialRequest
     requestBody = body
     const validationError = validateInput(body)
 
     if (validationError) {
-      await salvarLog(integracao.id, request, 400, validationError, Date.now() - inicio, body)
+      await salvarLog(integracao.id, request, 400, { ok: false, error: validationError }, Date.now() - inicio, body)
       return NextResponse.json(
-        { error: validationError },
+        { ok: false, error: validationError },
         { status: 400 }
       )
     }
 
     // 3. Extrair dados
-    const cep = body.zipCode.replace(/\D/g, '')
-    const marketplace = body.marketplace || CANAL_NOME
+    const cep = String(body.cep).replace(/\D/g, '')
+    const marketplace = body.store_id ? `store:${body.store_id}` : CANAL_NOME
 
-    // 4. Montar array de produtos para cotação usando SKU
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const produtosParaCotar = body.products.map((p: any) => ({
-      sku: String(p.sku),
-      quantidade: Number(p.amount) || 1,
-      valor: Number(p.value) || 0,
+    // 4. Mapear items → produtos do serviço de cotação (price_cents → reais)
+    const produtosParaCotar = body.items.map((i) => ({
+      sku: String(i.sku),
+      quantidade: Number(i.qty) || 1,
+      valor: i.price_cents != null ? Number(i.price_cents) / 100 : 0,
     }))
 
-    // 5. Realizar cotação (isolamento multi-tenant)
+    // 5. Realizar cotação (multi-tenant)
     const { cotacoes, erros, produtosDB } = await cotacaoService.cotar(cep, produtosParaCotar, integracao.usuarioId)
 
-    // 6. Formatar resposta
+    // 6. Formatar resposta no contrato Casa Imperial
     const response = formatarResposta(cotacoes)
+    const statusEnviado = response.ok ? 200 : 200 // contrato sempre 200, ok=false dentro do body
 
-    // 7. Medir tempo de resposta
     const tempoTotal = Date.now() - inicio
 
-    // 8. Salvar logs em background (não bloqueia a resposta)
+    // 7. Logs em background
     Promise.all([
       cotacaoService.salvarLogCotacao(
         cep, produtosParaCotar, cotacoes, 'API', marketplace,
         integracao.usuarioId, undefined, undefined, tempoTotal, erros,
-        { casaImperialResponse: response, statusEnviado: 200, tempoMs: tempoTotal },
+        { casaImperialResponse: response, statusEnviado, tempoMs: tempoTotal },
         produtosDB
       ),
-      salvarLog(integracao.id, request, 200, response, tempoTotal, body),
+      salvarLog(integracao.id, request, statusEnviado, response, tempoTotal, body),
       prisma.usuarioIntegracaoCanal.update({
         where: { id: integracao.id },
         data: {
@@ -148,92 +159,111 @@ export async function POST(
 
   } catch (error) {
     if (error instanceof CotacaoError && integracao) {
-      const skus = (requestBody?.products || []).map((p: { sku: string }) => p.sku)
+      const skus = (requestBody?.items || []).map(i => String(i.sku))
 
       await cotacaoService.registrarAuditoria({
         tipo: error.tipo,
         descricao: error.message,
         detalhes: error.detalhes,
-        cep: requestBody?.zipCode?.replace(/\D/g, '') || '',
+        cep: requestBody?.cep ? String(requestBody.cep).replace(/\D/g, '') : '',
         skus,
         origem: 'API',
-        marketplace: requestBody?.marketplace || CANAL_NOME,
+        marketplace: requestBody?.store_id ? `store:${requestBody.store_id}` : CANAL_NOME,
         integracaoId: integracao.id,
         usuarioId: integracao.usuarioId,
       })
 
       const tempoProcessamento = Date.now() - inicio
-      await salvarLog(integracao.id, request, 400, { error: error.message, tipo: error.tipo }, tempoProcessamento, requestBody)
-
-      return NextResponse.json({ items: [], error: error.message })
+      const errorBody = { ok: false, error: error.message }
+      await salvarLog(integracao.id, request, 200, errorBody, tempoProcessamento, requestBody)
+      return NextResponse.json(errorBody)
     }
 
     logger.error(`Erro no endpoint ${CANAL_NOME}:`, error)
 
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { ok: false, error: 'Erro interno' },
       { status: 500 }
     )
   }
 }
 
-function validateInput(data: Record<string, unknown>): string | null {
-  if (!data.zipCode) {
-    return 'zipCode is required'
+// ───────── Helpers ─────────
+
+function validateInput(data: unknown): string | null {
+  if (!data || typeof data !== 'object') return 'body inválido'
+  const d = data as Record<string, unknown>
+
+  if (!d.cep || (typeof d.cep !== 'string' && typeof d.cep !== 'number')) {
+    return 'campo "cep" é obrigatório'
   }
 
-  if (!data.products || !Array.isArray(data.products)) {
-    return 'products array is required'
+  if (!Array.isArray(d.items) || d.items.length === 0) {
+    return 'campo "items" é obrigatório (array não vazio)'
   }
 
-  for (let i = 0; i < data.products.length; i++) {
-    const prod = data.products[i]
-    if (!prod.sku) {
-      return `Product at index ${i} is missing sku`
+  for (let i = 0; i < d.items.length; i++) {
+    const it = d.items[i] as Record<string, unknown>
+    if (it == null || (typeof it.sku !== 'string' && typeof it.sku !== 'number')) {
+      return `items[${i}] sem "sku"`
+    }
+    if (typeof it.qty !== 'number' || it.qty <= 0) {
+      return `items[${i}].qty deve ser número positivo`
     }
   }
 
   return null
 }
 
-function formatarResposta(cotacoes: Array<{ transportadora_id: number; transportadora_nome: string; valor_frete: number; prazo_entrega: number; regiao_nome?: string }>) {
+type CotacaoResultado = {
+  transportadora_id: number
+  transportadora_nome: string
+  valor_frete: number
+  prazo_entrega: number
+  regiao_nome?: string
+}
+
+type Option = {
+  id: string
+  name: string
+  price_cents: number
+  eta_days: number
+}
+
+type ResponseSuccess = { ok: true; options: Option[] }
+type ResponseError = { ok: false; error: string }
+type Response = ResponseSuccess | ResponseError
+
+function formatarResposta(cotacoes: CotacaoResultado[]): Response {
   if (!cotacoes || cotacoes.length === 0) {
-    return { items: [] }
+    return { ok: false, error: 'Sem cotação disponível para o CEP/produtos informados' }
   }
 
+  // Mais barato e mais rápido (mesmo critério da integração Anymarket)
   let maisBarato = cotacoes[0]
   let maisRapido = cotacoes[0]
-
   for (const cot of cotacoes) {
-    if (cot.valor_frete < maisBarato.valor_frete) {
-      maisBarato = cot
-    }
-    if (cot.prazo_entrega < maisRapido.prazo_entrega) {
-      maisRapido = cot
-    }
+    if (cot.valor_frete < maisBarato.valor_frete) maisBarato = cot
+    if (cot.prazo_entrega < maisRapido.prazo_entrega) maisRapido = cot
   }
 
-  const items = []
-
-  items.push({
-    serviceName: maisBarato.regiao_nome || 'Transporte Terrestre',
-    carrierName: maisBarato.transportadora_nome,
-    deliveryTime: maisBarato.prazo_entrega,
-    price: parseFloat(maisBarato.valor_frete.toFixed(2)),
-    freightType: 'NORMAL',
-  })
+  const options: Option[] = [{
+    id: 'normal',
+    name: maisBarato.transportadora_nome,
+    price_cents: Math.round(maisBarato.valor_frete * 100),
+    eta_days: maisBarato.prazo_entrega,
+  }]
 
   if (maisRapido.transportadora_id !== maisBarato.transportadora_id) {
-    items.push({
-      serviceName: maisRapido.regiao_nome || 'Transporte Expresso',
-      carrierName: maisRapido.transportadora_nome,
-      deliveryTime: maisRapido.prazo_entrega,
-      price: parseFloat(maisRapido.valor_frete.toFixed(2)),
-      freightType: 'EXPRESSA',
+    options.push({
+      id: 'expressa',
+      name: maisRapido.transportadora_nome,
+      price_cents: Math.round(maisRapido.valor_frete * 100),
+      eta_days: maisRapido.prazo_entrega,
     })
   }
 
-  return { items }
+  return { ok: true, options }
 }
 
 const SAFE_HEADERS = ['content-type', 'content-length', 'user-agent', 'x-forwarded-for', 'x-real-ip', 'accept', 'origin', 'referer']
