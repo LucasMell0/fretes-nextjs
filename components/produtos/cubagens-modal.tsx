@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -186,9 +186,16 @@ export function CubagensModal({ produtoId, open, onOpenChange, onChanged }: Cuba
     }
   }
 
-  // Transportadoras disponíveis (sem cubagem cadastrada)
-  const transportadorasDisponiveis = transportadoras.filter(
-    t => !cubagens.some(c => c.transportadora.id === t.id)
+  // Transportadoras disponíveis (sem cubagem cadastrada) — memoizado pra não recomputar em todo render
+  const transportadorasDisponiveis = useMemo(
+    () => transportadoras.filter(t => !cubagens.some(c => c.transportadora.id === t.id)),
+    [transportadoras, cubagens]
+  )
+
+  // Nome da transportadora em edição (memoizado pra não rodar find a cada render)
+  const transportadoraEmEdicao = useMemo(
+    () => editandoId ? cubagens.find(c => c.id === editandoId)?.transportadora.nome : null,
+    [editandoId, cubagens]
   )
 
   return (
@@ -307,7 +314,7 @@ export function CubagensModal({ produtoId, open, onOpenChange, onChanged }: Cuba
               <Label htmlFor="transportadora">Transportadora</Label>
               {editandoId ? (
                 <div className="mt-1 px-3 py-2 rounded-md border bg-muted/30 text-sm font-medium">
-                  {cubagens.find(c => c.id === editandoId)?.transportadora.nome || '—'}
+                  {transportadoraEmEdicao || '—'}
                 </div>
               ) : (
                 <Select

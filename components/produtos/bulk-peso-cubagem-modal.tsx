@@ -56,10 +56,10 @@ export function BulkPesoCubagemModal({ produtoIds, open, onOpenChange, onSuccess
 
       toast({
         title: 'Aplicado com sucesso',
-        description: `${data.atualizados} produto(s) atualizado(s)${data.ignorados ? ` · ${data.ignorados} ignorado(s)` : ''}.`,
+        description: `${data.aplicados} produto(s) atualizado(s)${data.ignorados ? ` · ${data.ignorados} ignorado(s)` : ''}.`,
       })
       onOpenChange(false)
-      onSuccess?.(data.atualizados)
+      onSuccess?.(data.aplicados)
     } catch {
       toast({ variant: 'destructive', title: 'Erro ao aplicar' })
     } finally {
@@ -110,7 +110,7 @@ export function BulkPesoCubagemModal({ produtoIds, open, onOpenChange, onSuccess
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={salvando}>Cancelar</Button>
-          <Button onClick={salvar} disabled={salvando}>
+          <Button onClick={salvar} disabled={salvando || (peso == null && cubagem == null)}>
             {salvando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Aplicar em {produtoIds.length} produto(s)
           </Button>

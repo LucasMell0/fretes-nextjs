@@ -42,35 +42,29 @@ export const POST = withAuth(async (req, { userId }) => {
       )
     }
 
-    // Filtra produtos do usuário
-    const produtosValidos = await prisma.produto.findMany({
-      where: { id: { in: produtoIds }, usuarioId: userId },
-      select: { id: true },
-    })
-    const idsValidos = produtosValidos.map(p => p.id)
+    const dados: { peso?: number; cubagem?: number } = {}
+    if (peso != null) dados.peso = peso
+    if (cubagem != null) dados.cubagem = cubagem
 
-    if (idsValidos.length === 0) {
+    // updateMany com filtro de usuarioId garante ownership na mesma query
+    const result = await prisma.produto.updateMany({
+      where: { id: { in: produtoIds }, usuarioId: userId },
+      data: dados,
+    })
+
+    if (result.count === 0) {
       return NextResponse.json(
         { erro: 'Nenhum dos produtos selecionados pertence ao usuário' },
         { status: 404 }
       )
     }
 
-    const dados: Record<string, unknown> = {}
-    if (peso != null) dados.peso = peso
-    if (cubagem != null) dados.cubagem = cubagem
-
-    const result = await prisma.produto.updateMany({
-      where: { id: { in: idsValidos } },
-      data: dados,
-    })
-
     invalidateProdutoCache(userId).catch(() => {})
 
     return NextResponse.json({
       success: true,
-      atualizados: result.count,
-      ignorados: produtoIds.length - idsValidos.length,
+      aplicados: result.count,
+      ignorados: produtoIds.length - result.count,
     })
   } catch (error) {
     logger.error('Erro ao aplicar peso/cubagem em lote:', error)
