@@ -9,14 +9,15 @@ datasource db {
 }
 
 model Usuario {
-  id              Int                      @id @default(autoincrement())
-  nome            String                   @db.VarChar(100)
-  email           String                   @unique @db.VarChar(100)
-  senha           String                   @db.VarChar(255)
-  tipo            TipoUsuario              @default(USUARIO)
-  ativo           Boolean                  @default(true)
-  dataCriacao     DateTime                 @default(now()) @map("data_criacao")
-  dataAtualizacao DateTime                 @updatedAt @map("data_atualizacao")
+  id                Int                      @id @default(autoincrement())
+  nome              String                   @db.VarChar(100)
+  email             String                   @unique @db.VarChar(100)
+  senha             String                   @db.VarChar(255)
+  tipo              TipoUsuario              @default(USUARIO)
+  ativo             Boolean                  @default(true)
+  cotarPorUnidade   Boolean                  @default(false) @map("cotar_por_unidade")
+  dataCriacao       DateTime                 @default(now()) @map("data_criacao")
+  dataAtualizacao   DateTime                 @updatedAt @map("data_atualizacao")
   cotacoes        CotacaoLog[]
   cotacoesProdutos CotacaoLogProduto[]
   produtos        Produto[]                @relation("ProdutosUsuario")

@@ -6,8 +6,9 @@ import { withAuth } from '@/lib/middleware/auth'
 import { sanitizeTransform } from '@/lib/utils/sanitize'
 
 const perfilSchema = z.object({
-  nome: z.string().min(3, 'Nome deve ter no mínimo 3 caracteres').max(100).transform(sanitizeTransform),
-  email: z.string().email('E-mail inválido').max(255),
+  nome: z.string().min(3, 'Nome deve ter no mínimo 3 caracteres').max(100).transform(sanitizeTransform).optional(),
+  email: z.string().email('E-mail inválido').max(255).optional(),
+  cotarPorUnidade: z.boolean().optional(),
 })
 
 export const GET = withAuth(async (req, { userId }) => {
@@ -20,6 +21,7 @@ export const GET = withAuth(async (req, { userId }) => {
         email: true,
         tipo: true,
         ativo: true,
+        cotarPorUnidade: true,
         dataCriacao: true,
       },
     })
@@ -53,34 +55,38 @@ export const PUT = withAuth(async (req, { userId }) => {
       )
     }
 
-    // Verificar se o email já está em uso por outro usuário
-    const emailExistente = await prisma.usuario.findFirst({
-      where: {
-        email: validation.data.email,
-        NOT: {
-          id: userId,
+    // Verificar se o email já está em uso por outro usuário (só se está alterando)
+    if (validation.data.email) {
+      const emailExistente = await prisma.usuario.findFirst({
+        where: {
+          email: validation.data.email,
+          NOT: { id: userId },
         },
-      },
-    })
+      })
 
-    if (emailExistente) {
-      return NextResponse.json(
-        { erro: 'E-mail já está em uso' },
-        { status: 409 }
-      )
+      if (emailExistente) {
+        return NextResponse.json(
+          { erro: 'E-mail já está em uso' },
+          { status: 409 }
+        )
+      }
     }
+
+    // Monta data só com os campos presentes
+    const dados: Record<string, unknown> = {}
+    if (validation.data.nome !== undefined) dados.nome = validation.data.nome
+    if (validation.data.email !== undefined) dados.email = validation.data.email
+    if (validation.data.cotarPorUnidade !== undefined) dados.cotarPorUnidade = validation.data.cotarPorUnidade
 
     const usuarioAtualizado = await prisma.usuario.update({
       where: { id: userId },
-      data: {
-        nome: validation.data.nome,
-        email: validation.data.email,
-      },
+      data: dados,
       select: {
         id: true,
         nome: true,
         email: true,
         tipo: true,
+        cotarPorUnidade: true,
       },
     })
 

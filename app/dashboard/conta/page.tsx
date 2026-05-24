@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/use-toast'
-import { User2, Lock, Loader2, Shield, Calendar, Hash, Eye, EyeOff, Save } from 'lucide-react'
+import { Switch } from '@/components/ui/switch'
+import { User2, Lock, Loader2, Shield, Calendar, Hash, Eye, EyeOff, Save, Settings2 } from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
 import { useSession } from 'next-auth/react'
 
@@ -17,6 +18,7 @@ interface Usuario {
   email: string
   tipo: string
   ativo: boolean
+  cotarPorUnidade: boolean
   dataCriacao: string
 }
 
@@ -296,6 +298,63 @@ export default function ContaPage() {
                 </>
               )}
             </Button>
+          </CardContent>
+        </Card>
+
+        {/* Preferências de Cotação */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Settings2 className="h-5 w-5" />
+              Preferências de Cotação
+            </CardTitle>
+            <CardDescription>
+              Controla como o sistema calcula o frete em cotações via API e manuais.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-start justify-between gap-4 rounded-md border p-4">
+              <div className="flex-1">
+                <Label htmlFor="cotar-por-unidade" className="font-medium cursor-pointer">
+                  Cotar produtos por unidade (somar valores)
+                </Label>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Quando ativado, cada produto é cotado como se tivesse <strong>1 unidade</strong> e o valor é
+                  multiplicado pela quantidade. Útil para móveis e produtos volumosos que extrapolam as
+                  faixas de peso quando somados.
+                </p>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Exemplo: 2 sofás de 80kg cada → em vez de buscar faixa para 160kg, busca para 80kg e
+                  multiplica o frete por 2.
+                </p>
+              </div>
+              <Switch
+                id="cotar-por-unidade"
+                checked={usuario?.cotarPorUnidade ?? false}
+                disabled={salvandoPerfil}
+                onCheckedChange={async (checked) => {
+                  setSalvandoPerfil(true)
+                  try {
+                    const res = await fetch('/api/usuarios/perfil', {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ cotarPorUnidade: checked }),
+                    })
+                    const data = await res.json()
+                    if (res.ok) {
+                      setUsuario(prev => prev ? { ...prev, cotarPorUnidade: checked } : null)
+                      toast({ title: checked ? 'Cotação por unidade ativada' : 'Cotação por unidade desativada' })
+                    } else {
+                      toast({ variant: 'destructive', title: 'Erro', description: data.erro })
+                    }
+                  } catch {
+                    toast({ variant: 'destructive', title: 'Erro ao atualizar' })
+                  } finally {
+                    setSalvandoPerfil(false)
+                  }
+                }}
+              />
+            </div>
           </CardContent>
         </Card>
 

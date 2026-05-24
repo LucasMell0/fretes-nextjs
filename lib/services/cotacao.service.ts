@@ -69,10 +69,11 @@ export class CotacaoService {
     const cachedResult = await cache.get<{ cotacoes: ResultadoCotacao[]; erros: string[]; produtosDB?: ProdutoLog[] }>(cotacaoCacheKey)
     if (cachedResult) return cachedResult
 
-    // Buscar regiões e produtos em PARALELO (2 queries independentes)
-    const [regioes, produtosCompletos] = await Promise.all([
+    // Buscar regiões, produtos e config do usuário em PARALELO
+    const [regioes, produtosCompletos, cotarPorUnidade] = await Promise.all([
       this.buscarTransportadorasPorCep(cepLimpo, usuarioId),
       this.buscarDadosProdutos(produtos, usuarioId),
+      this.buscarConfigCotarPorUnidade(usuarioId),
     ])
 
     if (regioes.length === 0) {
@@ -99,7 +100,7 @@ export class CotacaoService {
     const errosPorTransportadora: string[] = []
     const cotacoesPromises = regioes.map(async (regiao) => {
       try {
-        return await this.calcularCotacao(regiao, produtosCompletos)
+        return await this.calcularCotacao(regiao, produtosCompletos, cotarPorUnidade)
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error)
         errosPorTransportadora.push(`${regiao.transportadora.nome}: ${msg}`)
@@ -234,112 +235,155 @@ export class CotacaoService {
   }
 
   /**
+   * Lê do banco o flag global do usuário "cotarPorUnidade".
+   * Cacheado por 5min via lib/cache.
+   */
+  private async buscarConfigCotarPorUnidade(usuarioId?: number): Promise<boolean> {
+    if (!usuarioId) return false
+    const cacheKey = `usuario-config:${usuarioId}`
+    const cached = await cache.get<{ cotarPorUnidade: boolean }>(cacheKey)
+    if (cached) return cached.cotarPorUnidade
+
+    const u = await prisma.usuario.findUnique({
+      where: { id: usuarioId },
+      select: { cotarPorUnidade: true },
+    })
+    const valor = u?.cotarPorUnidade ?? false
+    cache.set(cacheKey, { cotarPorUnidade: valor }, 300).catch(() => {})
+    return valor
+  }
+
+  /**
+   * Extrai peso e cubagem unitários de UM produto respeitando a cadeia
+   * config-filho → config-pai → padrão-filho → padrão-pai (com flag).
+   */
+  private obterPesoCubagemUnitario(
+    produto: Awaited<ReturnType<typeof this.buscarDadosProdutos>>[0],
+    regiao: Awaited<ReturnType<typeof this.buscarTransportadorasPorCep>>[0]
+  ): { pesoRealUnitario: number; pesoCubadoUnitario: number; cubagemM3: number } {
+    const fatorCubagem = Number(regiao.transportadora.fatorCubagem)
+    const pai = produto.produtoPai as typeof produto | null
+    const usarDadosPadraosPai = !!(pai && (pai as unknown as { usarDadosPaiParaVariacoes: boolean }).usarDadosPaiParaVariacoes)
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const configFilho = produto.cubagens.find((c: any) => c.transportadoraId === regiao.transportadoraId)
+    const configPai = pai
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ? pai.cubagens.find((c: any) => c.transportadoraId === regiao.transportadoraId)
+      : undefined
+
+    let cubagemM3: number
+    if (configFilho?.cubagem != null) cubagemM3 = Number(configFilho.cubagem)
+    else if (usarDadosPadraosPai && configPai?.cubagem != null) cubagemM3 = Number(configPai.cubagem)
+    else if (Number(produto.cubagem) > 0 || !usarDadosPadraosPai) cubagemM3 = Number(produto.cubagem)
+    else cubagemM3 = Number(pai!.cubagem)
+
+    let pesoRealUnitario: number
+    if (configFilho?.peso != null) pesoRealUnitario = Number(configFilho.peso)
+    else if (usarDadosPadraosPai && configPai?.peso != null) pesoRealUnitario = Number(configPai.peso)
+    else if (Number(produto.peso) > 0 || !usarDadosPadraosPai) pesoRealUnitario = Number(produto.peso)
+    else pesoRealUnitario = Number(pai!.peso)
+
+    const pesoCubadoUnitario = this.calcularPesoCubado(fatorCubagem, cubagemM3)
+    return { pesoRealUnitario, pesoCubadoUnitario, cubagemM3 }
+  }
+
+  /**
+   * Dado um peso taxado, encontra a faixa de preço aplicável e calcula
+   * valor base + kg adicional (se peso excede a última faixa).
+   * Throw se peso não cabe em nenhuma faixa e não tem kg adicional configurado.
+   */
+  private resolverFaixa(
+    regiao: Awaited<ReturnType<typeof this.buscarTransportadorasPorCep>>[0],
+    pesoTaxado: number,
+    sku?: string
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ): { valorBase: number; valorKgAdicional: number; faixaUsada: any } {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let faixaUsada: any = regiao.precos.find(
+      (f: { pesoInicial: number | string; pesoFinal: number | string }) =>
+        pesoTaxado >= Number(f.pesoInicial) && pesoTaxado <= Number(f.pesoFinal)
+    )
+
+    if (faixaUsada) {
+      return { valorBase: Number(faixaUsada.valor), valorKgAdicional: 0, faixaUsada }
+    }
+
+    if (!regiao.kgAdicional || Number(regiao.kgAdicional.valorKgAdicional) <= 0) {
+      const ctx = sku ? ` (SKU ${sku})` : ''
+      throw new Error(`Nenhuma faixa de preço encontrada para peso ${pesoTaxado}kg${ctx} e kg adicional não configurado`)
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    faixaUsada = regiao.precos.reduce((prev: any, current: any) =>
+      Number(current.pesoFinal) > Number(prev.pesoFinal) ? current : prev
+    )
+    const valorBase = Number(faixaUsada.valor)
+    const pesoExcedente = pesoTaxado - Number(faixaUsada.pesoFinal)
+    const valorKgAdicional = pesoExcedente * Number(regiao.kgAdicional.valorKgAdicional)
+    return { valorBase, valorKgAdicional, faixaUsada }
+  }
+
+  /**
    * Calcula cotação para uma transportadora/região específica
    */
   private async calcularCotacao(
     regiao: Awaited<ReturnType<typeof this.buscarTransportadorasPorCep>>[0],
-    produtos: Awaited<ReturnType<typeof this.buscarDadosProdutos>>
+    produtos: Awaited<ReturnType<typeof this.buscarDadosProdutos>>,
+    cotarPorUnidade = false
   ): Promise<ResultadoCotacao> {
     const fatorCubagem = Number(regiao.transportadora.fatorCubagem)
-    
+
     let pesoReal = 0
     let pesoCubado = 0
     let valorVendaTotal = 0
+
+    // Modo "cotar por unidade": acumula valor base e kg adicional por produto
+    // (cada SKU vira uma sub-cotação independente — busca faixa por peso de 1 unidade
+    //  e multiplica pelo quantidade). No modo padrão isso é calculado uma vez no fim.
+    let valorBaseAcumulado = 0
+    let valorKgAdicionalAcumulado = 0
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let faixaUsadaParaPrazo: any = null
 
     for (const produto of produtos) {
       const quantidade = (produto as unknown as { quantidade: number }).quantidade || 1
       const valorVenda = (produto as unknown as { valorVenda: number }).valorVenda || 0
 
-      // Produto pai e flag de herança
-      const pai = produto.produtoPai as typeof produto | null
-      const usarDadosPadraosPai = !!(pai && (pai as unknown as { usarDadosPaiParaVariacoes: boolean }).usarDadosPaiParaVariacoes)
-
-      // Config por transportadora: filho usa as do pai SOMENTE se a flag estiver marcada
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const configFilho = produto.cubagens.find((c: any) => c.transportadoraId === regiao.transportadoraId)
-      const configPai = pai
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ? pai.cubagens.find((c: any) => c.transportadoraId === regiao.transportadoraId)
-        : undefined
-
-      // Prioridade cubagem:
-      // 1. config filho (sempre vence quando existe)
-      // 2. config pai (só se flag marcada)
-      // 3. cubagem padrão do filho (se > 0 ou flag desligada)
-      // 4. cubagem padrão do pai (fallback quando flag marcada e filho zerado)
-      let cubagemM3: number
-      if (configFilho?.cubagem != null) {
-        cubagemM3 = Number(configFilho.cubagem)
-      } else if (usarDadosPadraosPai && configPai?.cubagem != null) {
-        cubagemM3 = Number(configPai.cubagem)
-      } else if (Number(produto.cubagem) > 0 || !usarDadosPadraosPai) {
-        cubagemM3 = Number(produto.cubagem)
-      } else {
-        cubagemM3 = Number(pai!.cubagem)
-      }
-
-      // Prioridade peso: mesmo critério da cubagem
-      let pesoRealUnitario: number
-      let fontePeso = ''
-      if (configFilho?.peso != null) {
-        pesoRealUnitario = Number(configFilho.peso)
-        fontePeso = 'config_filho'
-      } else if (usarDadosPadraosPai && configPai?.peso != null) {
-        pesoRealUnitario = Number(configPai.peso)
-        fontePeso = 'config_pai'
-      } else if (Number(produto.peso) > 0 || !usarDadosPadraosPai) {
-        pesoRealUnitario = Number(produto.peso)
-        fontePeso = 'padrao_filho'
-      } else {
-        pesoRealUnitario = Number(pai!.peso)
-        fontePeso = 'padrao_pai'
-      }
-      const pesoCubadoUnitario = this.calcularPesoCubado(fatorCubagem, cubagemM3)
-
-      logger.info(`[Cotação] SKU=${produto.sku} transp=${regiao.transportadora.nome} | peso=${pesoRealUnitario}(${fontePeso}) cubagem=${cubagemM3} pesoCubado=${pesoCubadoUnitario} | temPai=${!!pai} configFilho=${!!configFilho} configPai=${!!configPai}`)
+      const { pesoRealUnitario, pesoCubadoUnitario } = this.obterPesoCubagemUnitario(produto, regiao)
 
       pesoReal += pesoRealUnitario * quantidade
       pesoCubado += pesoCubadoUnitario * quantidade
       valorVendaTotal += valorVenda * quantidade
+
+      if (cotarPorUnidade) {
+        // Cota 1 unidade desse produto e multiplica o valor pela quantidade
+        const pesoTaxadoUnit = this.determinarPesoTaxado(pesoRealUnitario, pesoCubadoUnitario, fatorCubagem)
+        const subCotacao = this.resolverFaixa(regiao, pesoTaxadoUnit, produto.sku)
+        valorBaseAcumulado += subCotacao.valorBase * quantidade
+        valorKgAdicionalAcumulado += subCotacao.valorKgAdicional * quantidade
+        if (!faixaUsadaParaPrazo) faixaUsadaParaPrazo = subCotacao.faixaUsada
+      }
     }
 
     const pesoTaxado = this.determinarPesoTaxado(pesoReal, pesoCubado, fatorCubagem)
     const pesoFinal = this.arredondarPeso(pesoTaxado)
 
-    // Buscar faixa que contenha o peso exato
+    let valorBase: number
+    let valorKgAdicional: number
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let faixaPreco = regiao.precos.find(
-      (f: any) => pesoFinal >= Number(f.pesoInicial) && pesoFinal <= Number(f.pesoFinal)
-    )
-    
-    let valorBase = 0
-    let valorKgAdicional = 0
-    let pesoExcedente = 0
+    let faixaPreco: any
 
-    if (faixaPreco) {
-      // CASO 1: Peso está dentro de uma faixa válida
-      // Usa apenas o valor base, SEM kg adicional
-      valorBase = Number(faixaPreco.valor)
-      valorKgAdicional = 0
+    if (cotarPorUnidade) {
+      valorBase = valorBaseAcumulado
+      valorKgAdicional = valorKgAdicionalAcumulado
+      faixaPreco = faixaUsadaParaPrazo
     } else {
-      // CASO 2: Peso ultrapassa todas as faixas
-      // Verifica se tem kg adicional configurado
-      if (!regiao.kgAdicional || Number(regiao.kgAdicional.valorKgAdicional) <= 0) {
-        throw new Error(`Nenhuma faixa de preço encontrada para peso ${pesoFinal}kg e kg adicional não configurado`)
-      }
-
-      // Pega a última faixa (maior peso final)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const ultimaFaixa = regiao.precos.reduce((prev: any, current: any) =>
-        Number(current.pesoFinal) > Number(prev.pesoFinal) ? current : prev
-      )
-
-      faixaPreco = ultimaFaixa
-      valorBase = Number(ultimaFaixa.valor)
-      
-      // Calcula kg excedente: peso total - peso final da última faixa
-      pesoExcedente = pesoFinal - Number(ultimaFaixa.pesoFinal)
-      valorKgAdicional = pesoExcedente * Number(regiao.kgAdicional.valorKgAdicional)
+      // Modo somatório (atual): uma única busca de faixa pelo peso total
+      const resolvido = this.resolverFaixa(regiao, pesoFinal)
+      valorBase = resolvido.valorBase
+      valorKgAdicional = resolvido.valorKgAdicional
+      faixaPreco = resolvido.faixaUsada
     }
 
     const valorSemTaxas = valorBase + valorKgAdicional
