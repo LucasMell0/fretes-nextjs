@@ -78,7 +78,7 @@ export const POST = withAuth(async (req, { userId }) => {
       }
     })
 
-    invalidateProdutoCache(userId)
+    invalidateProdutoCache(userId).catch(() => {})
     return NextResponse.json(produto, { status: 201 })
   } catch (error: unknown) {
     if (error instanceof Error && (error as Error & { code?: string }).code === 'P2002') {

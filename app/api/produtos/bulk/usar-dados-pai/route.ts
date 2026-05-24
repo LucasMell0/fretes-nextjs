@@ -27,7 +27,7 @@ export const POST = withAuth(async (req, { userId }) => {
       data: { usarDadosPaiParaVariacoes: valor },
     })
 
-    invalidateProdutoCache(userId)
+    invalidateProdutoCache(userId).catch(() => {})
     return NextResponse.json({ success: true, atualizados: result.count, valor })
   } catch (error) {
     logger.error('Erro ao aplicar usar-dados-pai em massa:', error)

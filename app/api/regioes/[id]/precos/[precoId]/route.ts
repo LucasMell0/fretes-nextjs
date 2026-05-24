@@ -93,7 +93,7 @@ export const PUT = withAuthTyped<RouteParams>(async (req, { userId }, params) =>
       data: validation.data,
     })
 
-    invalidateRegiaoCache(userId)
+    invalidateRegiaoCache(userId).catch(() => {})
     return NextResponse.json(precoAtualizado)
   } catch (error) {
     logger.error('Erro ao atualizar preço:', error)
@@ -141,7 +141,7 @@ export const DELETE = withAuthTyped<RouteParams>(async (req, { userId }, params)
       where: { id: precoId },
     })
 
-    invalidateRegiaoCache(userId)
+    invalidateRegiaoCache(userId).catch(() => {})
     return NextResponse.json({ sucesso: true })
   } catch (error) {
     logger.error('Erro ao excluir preço:', error)

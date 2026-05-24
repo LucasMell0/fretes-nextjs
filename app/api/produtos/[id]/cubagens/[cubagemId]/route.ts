@@ -49,7 +49,7 @@ export const DELETE = withAuthTyped<RouteParams>(async (req, { userId }, params)
       where: { id: cubagemId },
     })
 
-    invalidateProdutoCache(userId)
+    invalidateProdutoCache(userId).catch(() => {})
     return NextResponse.json({ sucesso: true })
   } catch (error) {
     logger.error('Erro ao deletar cubagem:', error)

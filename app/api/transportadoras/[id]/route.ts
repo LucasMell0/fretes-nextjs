@@ -81,8 +81,8 @@ export const PUT = withAuthTyped<RouteParams>(async (req, { userId }, params) =>
       data: validation.data,
     })
 
-    invalidateRegiaoCache(userId)
-    invalidateProdutoCache(userId) // produtos têm cubagens por transportadora
+    invalidateRegiaoCache(userId).catch(() => {})
+    invalidateProdutoCache(userId).catch(() => {}) // produtos têm cubagens por transportadora
     return NextResponse.json(updated)
   } catch (error) {
     logger.error('Erro ao atualizar transportadora:', error)
@@ -114,8 +114,8 @@ export const DELETE = withAuthTyped<RouteParams>(async (req, { userId }, params)
       where: { id: transportadoraId }
     })
 
-    invalidateRegiaoCache(userId)
-    invalidateProdutoCache(userId)
+    invalidateRegiaoCache(userId).catch(() => {})
+    invalidateProdutoCache(userId).catch(() => {})
     return NextResponse.json({ sucesso: true })
   } catch (error) {
     logger.error('Erro ao deletar transportadora:', error)

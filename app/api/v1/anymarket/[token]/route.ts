@@ -67,14 +67,14 @@ export async function POST(
 
     // 1. Validar token (cache de 5 minutos)
     const tokenCacheKey = `token:${token}`
-    integracao = cache.get(tokenCacheKey)
+    integracao = await cache.get(tokenCacheKey)
     if (!integracao) {
       integracao = await prisma.usuarioIntegracaoCanal.findUnique({
         where: { token },
         select: { id: true, ativo: true, usuarioId: true },
       })
       if (integracao) {
-        cache.set(tokenCacheKey, integracao, 300)
+        cache.set(tokenCacheKey, integracao, 300).catch(() => {})
       }
     }
 

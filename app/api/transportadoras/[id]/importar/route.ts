@@ -63,7 +63,7 @@ export const POST = withAuthTyped<RouteParams>(async (req, { userId }, params) =
       )
     }
 
-    invalidateRegiaoCache(userId)
+    invalidateRegiaoCache(userId).catch(() => {})
     return NextResponse.json({
       sucesso: true,
       regioesImportadas: resultado.regioesImportadas,

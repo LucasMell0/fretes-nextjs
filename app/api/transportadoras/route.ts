@@ -56,7 +56,7 @@ export const POST = withAuth(async (req, { userId }) => {
       }
     })
 
-    invalidateRegiaoCache(userId)
+    invalidateRegiaoCache(userId).catch(() => {})
     return NextResponse.json(transportadora, { status: 201 })
   } catch (error) {
     logger.error('Erro ao criar transportadora:', error)

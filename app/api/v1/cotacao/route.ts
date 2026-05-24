@@ -58,14 +58,14 @@ export async function POST(request: NextRequest) {
 
     // Validar token e obter usuarioId para isolamento multi-tenant (cache 5min)
     const tokenCacheKey = `token:${token}`
-    integracao = cache.get<{ id: number; ativo: boolean; usuarioId: number }>(tokenCacheKey)
+    integracao = await cache.get<{ id: number; ativo: boolean; usuarioId: number }>(tokenCacheKey)
     if (!integracao) {
       integracao = await prisma.usuarioIntegracaoCanal.findUnique({
         where: { token },
         select: { id: true, ativo: true, usuarioId: true },
       })
       if (integracao) {
-        cache.set(tokenCacheKey, integracao, 300)
+        cache.set(tokenCacheKey, integracao, 300).catch(() => {})
       }
     }
 

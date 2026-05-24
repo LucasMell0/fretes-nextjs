@@ -66,7 +66,7 @@ export class CotacaoService {
     // Cache do resultado final: mesmo CEP + SKUs + quantidades = mesmo resultado
     const skusKey = produtos.map(p => `${p.sku}:${p.quantidade}:${p.valor || 0}`).sort().join('|')
     const cotacaoCacheKey = `cotacao:${usuarioId}:${cepLimpo}:${skusKey}`
-    const cachedResult = cache.get<{ cotacoes: ResultadoCotacao[]; erros: string[]; produtosDB?: ProdutoLog[] }>(cotacaoCacheKey)
+    const cachedResult = await cache.get<{ cotacoes: ResultadoCotacao[]; erros: string[]; produtosDB?: ProdutoLog[] }>(cotacaoCacheKey)
     if (cachedResult) return cachedResult
 
     // Buscar regiões e produtos em PARALELO (2 queries independentes)
@@ -138,9 +138,9 @@ export class CotacaoService {
       produtosDB,
     }
 
-    // Cachear resultado final por 30 segundos
+    // Cachear resultado final por 30 segundos (fire-and-forget — não bloqueia resposta)
     if (cotacoes.length > 0) {
-      cache.set(cotacaoCacheKey, resultado, 30)
+      cache.set(cotacaoCacheKey, resultado, 30).catch(() => {})
     }
 
     return resultado
@@ -153,7 +153,7 @@ export class CotacaoService {
   private async buscarTransportadorasPorCep(cep: string, usuarioId?: number): Promise<any[]> {
     const cacheKey = `regioes:${usuarioId}:${cep}`
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const cached = cache.get<any[]>(cacheKey)
+    const cached = await cache.get<any[]>(cacheKey)
     if (cached) return cached
 
     const whereClause: Record<string, unknown> = {
@@ -179,7 +179,7 @@ export class CotacaoService {
       },
     })
 
-    cache.set(cacheKey, result, 300) // 5 minutos
+    cache.set(cacheKey, result, 300).catch(() => {}) // 5 minutos (fire-and-forget)
     return result
   }
 
@@ -194,7 +194,7 @@ export class CotacaoService {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let produtosDB: any[]
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const cachedDB = cache.get<any[]>(cacheKey)
+    const cachedDB = await cache.get<any[]>(cacheKey)
 
     if (cachedDB) {
       produtosDB = cachedDB
@@ -220,7 +220,7 @@ export class CotacaoService {
         },
       })
 
-      cache.set(cacheKey, produtosDB, 300) // 5 minutos
+      cache.set(cacheKey, produtosDB, 300).catch(() => {}) // 5 minutos (fire-and-forget)
     }
 
     return produtosDB.map(p => {

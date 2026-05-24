@@ -148,7 +148,7 @@ export const POST = withAuthTyped<RouteParams>(async (req, { userId }, params) =
           transportadora: true,
         },
       })
-      invalidateProdutoCache(userId)
+      invalidateProdutoCache(userId).catch(() => {})
       return NextResponse.json(cubagemAtualizada)
     } else {
       // Criar
@@ -162,7 +162,7 @@ export const POST = withAuthTyped<RouteParams>(async (req, { userId }, params) =
           transportadora: true,
         },
       })
-      invalidateProdutoCache(userId)
+      invalidateProdutoCache(userId).catch(() => {})
       return NextResponse.json(novaCubagem, { status: 201 })
     }
   } catch (error) {

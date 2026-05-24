@@ -174,7 +174,7 @@ export const POST = withAuthTyped<RouteParams>(async (req, { userId }, params) =
       return created
     })
 
-    invalidateProdutoCache(userId)
+    invalidateProdutoCache(userId).catch(() => {})
     return NextResponse.json({
       sucesso: true,
       total: variacoesCriadas.length,

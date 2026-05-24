@@ -100,7 +100,7 @@ export const POST = withAuth(async (req, { userId }) => {
 
     logger.info(`Importação concluída:`, resultado)
 
-    invalidateProdutoCache(userId)
+    invalidateProdutoCache(userId).catch(() => {})
     return NextResponse.json({
       success: true,
       ...resultado

@@ -114,7 +114,7 @@ export const POST = withAuthTyped<RouteParams>(async (req, { userId }, params) =
       },
     })
 
-    invalidateRegiaoCache(userId)
+    invalidateRegiaoCache(userId).catch(() => {})
     return NextResponse.json(preco, { status: 201 })
   } catch (error) {
     logger.error('Erro ao criar preço:', error)

@@ -157,7 +157,7 @@ export const PUT = withAuthTyped<RouteParams>(async (req, { userId }, params) =>
       })
     }
 
-    invalidateRegiaoCache(userId)
+    invalidateRegiaoCache(userId).catch(() => {})
     return NextResponse.json(taxas)
   } catch (error) {
     logger.error('Erro ao salvar taxas:', error)

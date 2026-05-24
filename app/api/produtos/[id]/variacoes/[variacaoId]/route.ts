@@ -69,7 +69,7 @@ export const PUT = withAuthTyped<RouteParams>(async (req, { userId }, params) =>
       },
     })
 
-    invalidateProdutoCache(userId)
+    invalidateProdutoCache(userId).catch(() => {})
     return NextResponse.json(variacaoAtualizada)
   } catch (error) {
     logger.error('Erro ao atualizar variação:', error)
@@ -118,7 +118,7 @@ export const DELETE = withAuthTyped<RouteParams>(async (req, { userId }, params)
       where: { id: variacao.id },
     })
 
-    invalidateProdutoCache(userId)
+    invalidateProdutoCache(userId).catch(() => {})
     return NextResponse.json({ sucesso: true })
   } catch (error) {
     logger.error('Erro ao excluir variação:', error)

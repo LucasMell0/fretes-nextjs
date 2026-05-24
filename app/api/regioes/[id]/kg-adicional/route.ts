@@ -63,7 +63,7 @@ export const PUT = withAuthTyped<RouteParams>(async (req, { userId }, params) =>
       })
     }
 
-    invalidateRegiaoCache(userId)
+    invalidateRegiaoCache(userId).catch(() => {})
     return NextResponse.json(kgAdicional)
   } catch (error) {
     logger.error('Erro ao salvar KG adicional:', error)
