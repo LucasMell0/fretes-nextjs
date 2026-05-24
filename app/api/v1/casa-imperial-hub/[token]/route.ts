@@ -117,7 +117,8 @@ export async function POST(
 
     // 3. Extrair dados
     const cep = String(body.cep).replace(/\D/g, '')
-    const marketplace = body.store_id ? `store:${body.store_id}` : CANAL_NOME
+    // marketplace fica como o nome do canal; store_id segue rastreável no body do request log
+    const marketplace = CANAL_NOME
 
     // 4. Mapear items → produtos do serviço de cotação (price_cents → reais)
     const produtosParaCotar = body.items.map((i) => ({
@@ -168,7 +169,7 @@ export async function POST(
         cep: requestBody?.cep ? String(requestBody.cep).replace(/\D/g, '') : '',
         skus,
         origem: 'API',
-        marketplace: requestBody?.store_id ? `store:${requestBody.store_id}` : CANAL_NOME,
+        marketplace: CANAL_NOME,
         integracaoId: integracao.id,
         usuarioId: integracao.usuarioId,
       })
