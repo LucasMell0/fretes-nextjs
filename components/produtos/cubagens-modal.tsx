@@ -28,7 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Plus, Trash2, Loader2, Package } from 'lucide-react'
+import { Plus, Trash2, Loader2, Package, Pencil } from 'lucide-react'
 
 interface Transportadora {
   id: number
@@ -65,6 +65,7 @@ export function CubagensModal({ produtoId, open, onOpenChange, onChanged }: Cuba
   const [transportadoras, setTransportadoras] = useState<Transportadora[]>([])
   const [loading, setLoading] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
+  const [editandoId, setEditandoId] = useState<number | null>(null)
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false)
   const [cubagemParaExcluir, setCubagemParaExcluir] = useState<number | null>(null)
 
@@ -109,10 +110,21 @@ export function CubagensModal({ produtoId, open, onOpenChange, onChanged }: Cuba
   }, [open, produtoId, carregarDados])
 
   const abrirFormNovo = () => {
+    setEditandoId(null)
     setFormData({
       transportadoraId: transportadorasDisponiveis.length > 0 ? transportadorasDisponiveis[0].id : 0,
       cubagem: null,
       peso: null,
+    })
+    setFormOpen(true)
+  }
+
+  const abrirFormEditar = (c: Cubagem) => {
+    setEditandoId(c.id)
+    setFormData({
+      transportadoraId: c.transportadora.id,
+      cubagem: c.cubagem != null ? Number(c.cubagem) : null,
+      peso: c.peso != null ? Number(c.peso) : null,
     })
     setFormOpen(true)
   }
@@ -132,8 +144,9 @@ export function CubagensModal({ produtoId, open, onOpenChange, onChanged }: Cuba
       })
 
       if (res.ok) {
-        toast({ title: 'Cubagem salva!' })
+        toast({ title: editandoId ? 'Cubagem atualizada!' : 'Cubagem salva!' })
         setFormOpen(false)
+        setEditandoId(null)
         await carregarDados()
         onChanged?.()
       } else {
@@ -256,9 +269,14 @@ export function CubagensModal({ produtoId, open, onOpenChange, onChanged }: Cuba
                           )}
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button size="sm" variant="ghost" onClick={() => iniciarExclusao(c.id)} title="Excluir">
-                            <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                          </Button>
+                          <div className="flex items-center justify-end gap-1 whitespace-nowrap">
+                            <Button size="sm" variant="ghost" onClick={() => abrirFormEditar(c)} title="Editar">
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => iniciarExclusao(c.id)} title="Excluir">
+                              <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -276,28 +294,36 @@ export function CubagensModal({ produtoId, open, onOpenChange, onChanged }: Cuba
         </DialogContent>
       </Dialog>
 
-      {/* Sub-dialog: adicionar configuração */}
-      <Dialog open={formOpen} onOpenChange={setFormOpen}>
+      {/* Sub-dialog: adicionar/editar configuração */}
+      <Dialog open={formOpen} onOpenChange={(o) => { setFormOpen(o); if (!o) setEditandoId(null) }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Adicionar Peso e Cubagem Específicos</DialogTitle>
+            <DialogTitle>
+              {editandoId ? 'Editar Peso e Cubagem Específicos' : 'Adicionar Peso e Cubagem Específicos'}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
               <Label htmlFor="transportadora">Transportadora</Label>
-              <Select
-                value={formData.transportadoraId.toString()}
-                onValueChange={(value) => setFormData({ ...formData, transportadoraId: parseInt(value) })}
-              >
-                <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Selecione uma transportadora" />
-                </SelectTrigger>
-                <SelectContent>
-                  {transportadorasDisponiveis.map(t => (
-                    <SelectItem key={t.id} value={t.id.toString()}>{t.nome}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {editandoId ? (
+                <div className="mt-1 px-3 py-2 rounded-md border bg-muted/30 text-sm font-medium">
+                  {cubagens.find(c => c.id === editandoId)?.transportadora.nome || '—'}
+                </div>
+              ) : (
+                <Select
+                  value={formData.transportadoraId.toString()}
+                  onValueChange={(value) => setFormData({ ...formData, transportadoraId: parseInt(value) })}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Selecione uma transportadora" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {transportadorasDisponiveis.map(t => (
+                      <SelectItem key={t.id} value={t.id.toString()}>{t.nome}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
             <div>
               <Label htmlFor="peso">Peso (kg)</Label>
@@ -333,7 +359,7 @@ export function CubagensModal({ produtoId, open, onOpenChange, onChanged }: Cuba
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setFormOpen(false)}>Cancelar</Button>
+            <Button variant="outline" onClick={() => { setFormOpen(false); setEditandoId(null) }}>Cancelar</Button>
             <Button onClick={salvar}>Salvar</Button>
           </DialogFooter>
         </DialogContent>
