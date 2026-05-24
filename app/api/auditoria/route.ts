@@ -6,11 +6,11 @@ import { logger } from '@/lib/logger'
 /**
  * GET /api/auditoria
  *
- * Página unificada de Requisições + Auditoria.
- * Lista cotações de CotacaoLog (sucesso e falha) + retorna em separado
- * as falhas pendentes (AuditoriaCotacao) para serem mostradas numa seção.
+ * Tabela unificada: lista CotacaoLog (sucesso/sem-resultado) +
+ * AuditoriaCotacao (pendente/resolvido) numa lista só, ordenada por
+ * data desc.
  *
- * Query: page, limit, origem (MANUAL/API), cep, resultado (com/sem)
+ * Filtros: origem, cep, status (todos/sucesso/sem_resultado/pendente/resolvido)
  */
 export const GET = withAuth(async (req, { userId }) => {
   try {
@@ -20,67 +20,55 @@ export const GET = withAuth(async (req, { userId }) => {
     const skip = (page - 1) * limit
     const filtroOrigem = searchParams.get('origem')
     const filtroCep = searchParams.get('cep')
-    const filtroResultado = searchParams.get('resultado') // 'com' / 'sem' / null
+    const filtroStatus = searchParams.get('status') // todos | sucesso | sem_resultado | pendente | resolvido
 
-    const where: Record<string, unknown> = { usuarioId: userId }
+    const cepLimpo = filtroCep ? filtroCep.replace(/\D/g, '') : null
+
+    // ===== Decide quais sources buscar =====
+    const wantCotacao = !filtroStatus || filtroStatus === 'todos' || filtroStatus === 'sucesso' || filtroStatus === 'sem_resultado'
+    const wantAuditoria = !filtroStatus || filtroStatus === 'todos' || filtroStatus === 'pendente' || filtroStatus === 'resolvido'
+
+    // ===== Where comuns =====
+    const cotacaoWhere: Record<string, unknown> = { usuarioId: userId }
+    const auditoriaWhere: Record<string, unknown> = { usuarioId: userId }
 
     if (filtroOrigem && filtroOrigem !== 'todos') {
-      where.origem = filtroOrigem
+      cotacaoWhere.origem = filtroOrigem
+      auditoriaWhere.origem = filtroOrigem
+    }
+    if (cepLimpo) {
+      cotacaoWhere.cep = { contains: cepLimpo }
+      auditoriaWhere.cep = { contains: cepLimpo }
+    }
+    if (filtroStatus === 'sucesso') {
+      cotacaoWhere.totalTransportadoras = { gt: 0 }
+    } else if (filtroStatus === 'sem_resultado') {
+      cotacaoWhere.totalTransportadoras = 0
+    }
+    if (filtroStatus === 'pendente') {
+      auditoriaWhere.status = 'PENDENTE'
+    } else if (filtroStatus === 'resolvido') {
+      auditoriaWhere.status = 'RESOLVIDO'
     }
 
-    if (filtroCep) {
-      where.cep = { contains: filtroCep.replace(/\D/g, '') }
-    }
+    // ===== Fetch (top N de cada pra mesclar) =====
+    // Pra paginação correta sem UNION SQL, pega (skip+limit)*2 de cada lado
+    const fetchSize = (skip + limit) * 2
 
-    if (filtroResultado === 'com') {
-      where.totalTransportadoras = { gt: 0 }
-    } else if (filtroResultado === 'sem') {
-      where.totalTransportadoras = 0
-    }
-
-    const auditoriaWhere = { usuarioId: userId }
-
-    const [
-      logs,
-      totalFiltrado,
-      total,
-      totalComResultado,
-      totalSemResultado,
-      totalPendentesAuditoria,
-      totalResolvidosAuditoria,
-      tempoMedioAgg,
-      auditoriaPendentes,
-    ] = await Promise.all([
-      prisma.cotacaoLog.findMany({
-        where,
+    const [cotacoes, auditorias, totalCotacoes, totalAuditorias, statsCotacao, statsAuditoria, tempoMedioAgg] = await Promise.all([
+      wantCotacao ? prisma.cotacaoLog.findMany({
+        where: cotacaoWhere,
         include: {
           transportadora: { select: { nome: true } },
           produtos: {
-            select: {
-              produtoSku: true,
-              produtoNome: true,
-              quantidade: true,
-              pesoTotal: true,
-            },
+            select: { produtoSku: true, produtoNome: true, quantidade: true, pesoTotal: true },
           },
         },
         orderBy: { dataCotacao: 'desc' },
-        skip,
-        take: limit,
-      }),
-      prisma.cotacaoLog.count({ where }),
-      prisma.cotacaoLog.count({ where: { usuarioId: userId } }),
-      prisma.cotacaoLog.count({ where: { usuarioId: userId, totalTransportadoras: { gt: 0 } } }),
-      prisma.cotacaoLog.count({ where: { usuarioId: userId, totalTransportadoras: 0 } }),
-      prisma.auditoriaCotacao.count({ where: { ...auditoriaWhere, status: 'PENDENTE' } }),
-      prisma.auditoriaCotacao.count({ where: { ...auditoriaWhere, status: 'RESOLVIDO' } }),
-      prisma.cotacaoLog.aggregate({
-        where: { usuarioId: userId, tempoMs: { not: null } },
-        _avg: { tempoMs: true },
-      }),
-      // Lista compacta dos 50 pendentes mais recentes pra seção secundária
-      prisma.auditoriaCotacao.findMany({
-        where: { ...auditoriaWhere, status: 'PENDENTE' },
+        take: fetchSize,
+      }) : [],
+      wantAuditoria ? prisma.auditoriaCotacao.findMany({
+        where: auditoriaWhere,
         include: {
           integracao: {
             select: {
@@ -90,19 +78,111 @@ export const GET = withAuth(async (req, { userId }) => {
           },
         },
         orderBy: { criadoEm: 'desc' },
-        take: 50,
+        take: fetchSize,
+      }) : [],
+      wantCotacao ? prisma.cotacaoLog.count({ where: cotacaoWhere }) : 0,
+      wantAuditoria ? prisma.auditoriaCotacao.count({ where: auditoriaWhere }) : 0,
+      // Stats globais respeitando filtros (origem + cep)
+      prisma.cotacaoLog.groupBy({
+        by: ['usuarioId'],
+        where: {
+          usuarioId: userId,
+          ...(filtroOrigem && filtroOrigem !== 'todos' ? { origem: filtroOrigem } : {}),
+          ...(cepLimpo ? { cep: { contains: cepLimpo } } : {}),
+        },
+        _count: true,
+      }),
+      prisma.auditoriaCotacao.groupBy({
+        by: ['status'],
+        where: {
+          usuarioId: userId,
+          ...(filtroOrigem && filtroOrigem !== 'todos' ? { origem: filtroOrigem } : {}),
+          ...(cepLimpo ? { cep: { contains: cepLimpo } } : {}),
+        },
+        _count: true,
+      }),
+      prisma.cotacaoLog.aggregate({
+        where: {
+          usuarioId: userId,
+          tempoMs: { not: null },
+          ...(filtroOrigem && filtroOrigem !== 'todos' ? { origem: filtroOrigem } : {}),
+          ...(cepLimpo ? { cep: { contains: cepLimpo } } : {}),
+        },
+        _avg: { tempoMs: true },
       }),
     ])
 
-    const logsFormatados = logs.map(log => {
+    // Counts por status para os cards (auditoria)
+    const pendentes = statsAuditoria.find(s => s.status === 'PENDENTE')?._count || 0
+    const resolvidos = statsAuditoria.find(s => s.status === 'RESOLVIDO')?._count || 0
+    const totalCotacaoGlobal = statsCotacao[0]?._count || 0
+
+    // Counts sucesso/sem-resultado precisam de queries extras (totalTransportadoras)
+    const [cotacoesComResultado, cotacoesSemResultado] = await Promise.all([
+      prisma.cotacaoLog.count({
+        where: {
+          usuarioId: userId,
+          totalTransportadoras: { gt: 0 },
+          ...(filtroOrigem && filtroOrigem !== 'todos' ? { origem: filtroOrigem } : {}),
+          ...(cepLimpo ? { cep: { contains: cepLimpo } } : {}),
+        },
+      }),
+      prisma.cotacaoLog.count({
+        where: {
+          usuarioId: userId,
+          totalTransportadoras: 0,
+          ...(filtroOrigem && filtroOrigem !== 'todos' ? { origem: filtroOrigem } : {}),
+          ...(cepLimpo ? { cep: { contains: cepLimpo } } : {}),
+        },
+      }),
+    ])
+
+    // ===== Mescla =====
+    type ItemCotacao = {
+      kind: 'cotacao'
+      id: number
+      data: string
+      cep: string
+      origem: string
+      marketplace: string | null
+      statusGeral: 'sucesso' | 'sem_resultado'
+      tempoMs: number | null
+      melhorValor: number | null
+      melhorPrazo: number | null
+      totalTransportadoras: number
+      produtos: Array<{ sku: string; nome: string; quantidade: number; pesoTotal: number }>
+      // detalhes para modal
+      melhorTransportadora: string | null
+      resultados: Array<Record<string, unknown>>
+      erros: string[]
+      respostaCanal: Record<string, unknown> | null
+      requestRaw: string
+      responseRaw: string
+      ipOrigem: string | null
+    }
+    type ItemAuditoria = {
+      kind: 'auditoria'
+      id: number
+      data: string
+      cep: string | null
+      origem: string
+      marketplace: string | null
+      statusGeral: 'pendente' | 'resolvido'
+      tipo: 'SKU_NAO_ENCONTRADO' | 'CEP_NAO_ATENDIDO'
+      descricao: string
+      skus: string[]
+      integracao: { id: number; canal: { nome: string; slug: string } } | null
+    }
+    type Item = ItemCotacao | ItemAuditoria
+
+    const itensCotacao: ItemCotacao[] = cotacoes.map(log => {
       let resultados: Array<Record<string, unknown>> = []
       let erros: string[] = []
       let respostaCanal: Record<string, unknown> | null = null
       try {
         const parsed = JSON.parse(log.resultadoJson)
-        if (Array.isArray(parsed)) {
-          resultados = parsed
-        } else if (parsed.cotacoes) {
+        if (Array.isArray(parsed)) resultados = parsed
+        else if (parsed.cotacoes) {
           resultados = parsed.cotacoes || []
           erros = parsed._erros || []
           respostaCanal = parsed._respostaCanal || null
@@ -110,23 +190,20 @@ export const GET = withAuth(async (req, { userId }) => {
       } catch { /* ignore */ }
 
       return {
+        kind: 'cotacao',
         id: log.id,
+        data: log.dataCotacao.toISOString(),
         cep: log.cep,
         origem: log.origem,
         marketplace: log.marketplace,
-        melhorValor: log.melhorValor,
-        melhorPrazo: log.melhorPrazo,
-        melhorTransportadora: log.transportadora?.nome || null,
-        totalTransportadoras: log.totalTransportadoras,
-        dataCotacao: log.dataCotacao,
-        ipOrigem: log.ipOrigem,
-        userAgent: log.userAgent,
+        statusGeral: log.totalTransportadoras > 0 ? 'sucesso' : 'sem_resultado',
         tempoMs: log.tempoMs,
+        melhorValor: log.melhorValor ? Number(log.melhorValor) : null,
+        melhorPrazo: log.melhorPrazo,
+        totalTransportadoras: log.totalTransportadoras,
+        melhorTransportadora: log.transportadora?.nome || null,
         produtos: log.produtos.map(p => ({
-          sku: p.produtoSku,
-          nome: p.produtoNome,
-          quantidade: p.quantidade,
-          pesoTotal: Number(p.pesoTotal),
+          sku: p.produtoSku, nome: p.produtoNome, quantidade: p.quantidade, pesoTotal: Number(p.pesoTotal),
         })),
         resultados: resultados.map((r: Record<string, unknown>) => ({
           transportadora: r.transportadora_nome,
@@ -140,36 +217,46 @@ export const GET = withAuth(async (req, { userId }) => {
         respostaCanal,
         requestRaw: log.produtosJson,
         responseRaw: log.resultadoJson,
+        ipOrigem: log.ipOrigem,
       }
     })
 
+    const itensAuditoria: ItemAuditoria[] = auditorias.map(a => ({
+      kind: 'auditoria',
+      id: a.id,
+      data: a.criadoEm.toISOString(),
+      cep: a.cep,
+      origem: a.origem,
+      marketplace: a.marketplace,
+      statusGeral: a.status === 'PENDENTE' ? 'pendente' : 'resolvido',
+      tipo: a.tipo as 'SKU_NAO_ENCONTRADO' | 'CEP_NAO_ATENDIDO',
+      descricao: a.descricao,
+      skus: a.skus,
+      integracao: a.integracao,
+    }))
+
+    const merged: Item[] = [...itensCotacao, ...itensAuditoria]
+      .sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())
+
+    const totalFiltrado = totalCotacoes + totalAuditorias
+    const paginated = merged.slice(skip, skip + limit)
+
     return NextResponse.json({
       cards: {
-        total,
-        comResultado: totalComResultado,
-        semResultado: totalSemResultado,
-        pendentesAuditoria: totalPendentesAuditoria,
-        resolvidosAuditoria: totalResolvidosAuditoria,
+        total: totalCotacaoGlobal,
+        comResultado: cotacoesComResultado,
+        semResultado: cotacoesSemResultado,
+        pendentesAuditoria: pendentes,
+        resolvidosAuditoria: resolvidos,
         tempoMedio: tempoMedioAgg._avg.tempoMs ? Math.round(tempoMedioAgg._avg.tempoMs) : null,
       },
-      logs: logsFormatados,
+      itens: paginated,
       paginacao: {
         totalFiltrado,
         pagina: page,
         limit,
         totalPaginas: Math.ceil(totalFiltrado / limit),
       },
-      auditoriaPendentes: auditoriaPendentes.map(a => ({
-        id: a.id,
-        tipo: a.tipo,
-        descricao: a.descricao,
-        cep: a.cep,
-        skus: a.skus,
-        origem: a.origem,
-        marketplace: a.marketplace,
-        criadoEm: a.criadoEm,
-        integracao: a.integracao,
-      })),
     })
   } catch (error) {
     logger.error('Erro ao buscar auditoria:', error)
