@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, Fragment } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -23,7 +23,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Plus, Pencil, Trash2, Loader2, Package, Box, ChevronDown, ChevronRight, Search, X, Download, CheckCircle2, XCircle, MoreHorizontal, Settings2, Weight } from 'lucide-react'
+import { Plus, Pencil, Trash2, Loader2, Package, Box, ChevronDown, ChevronRight, Search, X, Download, CheckCircle2, XCircle, MoreHorizontal, Settings2, Weight, Truck } from 'lucide-react'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { usePagination } from '@/hooks/use-pagination'
 import { CubagensModal } from '@/components/produtos/cubagens-modal'
@@ -63,6 +63,12 @@ interface Atributo {
   valor: string
 }
 
+interface Transportadora {
+  id: number
+  nome: string
+  ativo: boolean
+}
+
 interface Produto {
   id: number
   produtoPaiId: number | null
@@ -75,6 +81,7 @@ interface Produto {
   ativo: boolean
   usarDadosPaiParaVariacoes?: boolean
   atributos: Atributo[]
+  cubagens?: { transportadoraId: number }[]
   variacoes?: Produto[]
   produtoPai?: {
     id: number
@@ -150,6 +157,8 @@ export default function ProdutosPage() {
   const [confirmDeleteMultipleOpen, setConfirmDeleteMultipleOpen] = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editando, setEditando] = useState<Produto | null>(null)
+  const [transportadoras, setTransportadoras] = useState<Transportadora[]>([])
+  const [filtroTransportadora, setFiltroTransportadora] = useState<string>(searchParams.get('transportadora') || '')
 
   // Sincroniza estado de listagem com URL (usa replace para não poluir histórico)
   useEffect(() => {
@@ -157,12 +166,13 @@ export default function ProdutosPage() {
     if (buscaTexto) params.set('busca', buscaTexto)
     if (paginaAtual !== 1) params.set('pagina', String(paginaAtual))
     if (itensPorPagina !== 10) params.set('perPage', String(itensPorPagina))
+    if (filtroTransportadora && filtroTransportadora !== 'none') params.set('transportadora', filtroTransportadora)
     const qs = params.toString()
     const url = qs ? `${pathname}?${qs}` : pathname
     if (url !== `${pathname}${window.location.search}`) {
       router.replace(url, { scroll: false })
     }
-  }, [buscaTexto, paginaAtual, itensPorPagina, pathname, router])
+  }, [buscaTexto, paginaAtual, itensPorPagina, filtroTransportadora, pathname, router])
 
   const carregarProdutos = async () => {
     try {
@@ -213,11 +223,12 @@ export default function ProdutosPage() {
 
   const handleBuscaChange = (valor: string) => {
     setBuscaTexto(valor)
+    setPaginaAtual(1)
     aplicarFiltros(produtos, valor)
   }
 
   const limparBusca = () => {
-    setBuscaTexto('')
+    handleBuscaChange('')
   }
 
   const aplicarUsarDadosPaiEmTodos = async () => {
@@ -261,10 +272,12 @@ export default function ProdutosPage() {
 
   const selecionarTodosTabela = () => {
     const produtosVisiveis = produtosExibir.slice((paginaAtual - 1) * itensPorPagina, paginaAtual * itensPorPagina)
-    if (produtosTabelaSelecionados.size === produtosVisiveis.length && produtosVisiveis.length > 0) {
+    const idsVisiveis = produtosVisiveis.map(p => p.id)
+    const todosVisivelSelecionados = idsVisiveis.length > 0 && idsVisiveis.every(id => produtosTabelaSelecionados.has(id))
+    if (todosVisivelSelecionados) {
       setProdutosTabelaSelecionados(new Set())
     } else {
-      setProdutosTabelaSelecionados(new Set(produtosVisiveis.map(p => p.id)))
+      setProdutosTabelaSelecionados(new Set(idsVisiveis))
     }
   }
 
@@ -333,8 +346,29 @@ export default function ProdutosPage() {
     }
   }
 
+  const carregarTransportadoras = async () => {
+    try {
+      const res = await fetch('/api/transportadoras')
+      if (!res.ok) throw new Error('Erro ao carregar transportadoras')
+      const data = await res.json()
+      setTransportadoras(data.filter((t: Transportadora) => t.ativo))
+    } catch {
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao carregar transportadoras',
+      })
+    }
+  }
+
+  const possuiCubagemParaTransportadora = (produto: Produto, transportadoraId: number, produtoPai?: Produto): boolean => {
+    if (produto.cubagens?.some(c => c.transportadoraId === transportadoraId)) return true
+    if (produtoPai?.usarDadosPaiParaVariacoes && produtoPai.cubagens?.some(c => c.transportadoraId === transportadoraId)) return true
+    return false
+  }
+
   useEffect(() => {
     carregarProdutos()
+    carregarTransportadoras()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -749,32 +783,74 @@ export default function ProdutosPage() {
         </div>
       )}
 
-      {/* Campo de Busca */}
-      <div className="mb-6">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar por nome ou SKU (inclui variações)..."
-            value={buscaTexto}
-            onChange={(e) => handleBuscaChange(e.target.value)}
-            className="pl-10 pr-10"
-          />
-          {buscaTexto && (
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={limparBusca}
-              className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
-              aria-label="Limpar busca"
+      {/* Campo de Busca + Filtro Transportadora */}
+      <div className="mb-6 flex flex-col gap-3">
+        <div className="flex gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar por nome ou SKU (inclui variações)..."
+              value={buscaTexto}
+              onChange={(e) => handleBuscaChange(e.target.value)}
+              className="pl-10 pr-10"
+            />
+            {buscaTexto && (
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={limparBusca}
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
+                aria-label="Limpar busca"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+          {transportadoras.length > 0 && (
+            <Select
+              value={filtroTransportadora}
+              onValueChange={setFiltroTransportadora}
             >
-              <X className="h-4 w-4" />
-            </Button>
+              <SelectTrigger className="w-72">
+                <div className="flex items-center gap-2">
+                  <Truck className="h-4 w-4 text-muted-foreground" />
+                  <SelectValue placeholder="Filtrar cubagem por transportadora" />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Nenhuma (ocultar flags)</SelectItem>
+                {transportadoras.map((t) => (
+                  <SelectItem key={t.id} value={String(t.id)}>
+                    {t.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           )}
         </div>
-        {buscaTexto && (
-          <p className="text-sm text-muted-foreground mt-2">
-            Exibindo <strong>{produtosExibir.length}</strong> de <strong>{produtos.filter(p => p.produtoPaiId === null).length}</strong> produtos
-          </p>
+        {(buscaTexto || (filtroTransportadora && filtroTransportadora !== 'none')) && (
+          <div className="flex items-center gap-4">
+            {buscaTexto && (
+              <p className="text-sm text-muted-foreground">
+                Exibindo <strong>{produtosExibir.length}</strong> de <strong>{produtos.filter(p => p.produtoPaiId === null).length}</strong> produtos
+              </p>
+            )}
+            {filtroTransportadora && filtroTransportadora !== 'none' && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Truck className="h-3.5 w-3.5" />
+                <span>Exibindo cubagens de: <strong>{transportadoras.find(t => String(t.id) === filtroTransportadora)?.nome}</strong></span>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => setFiltroTransportadora('')}
+                  className="h-5 w-5"
+                  aria-label="Limpar filtro"
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+            )}
+          </div>
         )}
       </div>
 
@@ -784,7 +860,7 @@ export default function ProdutosPage() {
             <TableRow>
               <TableHead className="w-12">
                 <Checkbox
-                  checked={produtosTabelaSelecionados.size === produtosPaginados.length && produtosPaginados.length > 0}
+                  checked={produtosPaginados.length > 0 && produtosPaginados.every(p => produtosTabelaSelecionados.has(p.id))}
                   onCheckedChange={selecionarTodosTabela}
                 />
               </TableHead>
@@ -792,6 +868,9 @@ export default function ProdutosPage() {
               <TableHead>Nome</TableHead>
               <TableHead>Peso</TableHead>
               <TableHead>Cubagem</TableHead>
+              {filtroTransportadora && filtroTransportadora !== 'none' && (
+                <TableHead className="w-24 text-center">Personalizada</TableHead>
+              )}
               <TableHead>Estoque</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Ações</TableHead>
@@ -799,9 +878,9 @@ export default function ProdutosPage() {
           </TableHeader>
           <TableBody>
             {produtosPaginados.map((p) => (
-              <>
+              <Fragment key={p.id}>
                 {/* Linha do produto pai */}
-                <TableRow key={p.id} className={p._count?.variacoes ? 'font-medium' : ''}>
+                <TableRow className={p._count?.variacoes ? 'font-medium' : ''}>
                   <TableCell>
                     <Checkbox
                       checked={produtosTabelaSelecionados.has(p.id)}
@@ -835,6 +914,21 @@ export default function ProdutosPage() {
                   <TableCell>{p.nome}</TableCell>
                   <TableCell>{Number(p.peso).toFixed(2)} kg</TableCell>
                   <TableCell>{Number(p.cubagem).toFixed(4)}</TableCell>
+                  {filtroTransportadora && filtroTransportadora !== 'none' && (
+                    <TableCell className="text-center">
+                      {possuiCubagemParaTransportadora(p, Number(filtroTransportadora)) ? (
+                        <Badge variant="default" className="text-xs bg-green-600 hover:bg-green-600">
+                          <CheckCircle2 className="h-3 w-3 mr-1" />
+                          Sim
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-xs text-muted-foreground">
+                          <XCircle className="h-3 w-3 mr-1" />
+                          Não
+                        </Badge>
+                      )}
+                    </TableCell>
+                  )}
                   <TableCell>{p.estoque}</TableCell>
                   <TableCell>
                     <Badge variant={p.ativo ? 'default' : 'secondary'}>
@@ -916,6 +1010,21 @@ export default function ProdutosPage() {
                         )}
                       </div>
                     </TableCell>
+                    {filtroTransportadora && filtroTransportadora !== 'none' && (
+                      <TableCell className="text-center">
+                        {possuiCubagemParaTransportadora(variacao, Number(filtroTransportadora), p) ? (
+                          <Badge variant="default" className="text-xs bg-green-600 hover:bg-green-600">
+                            <CheckCircle2 className="h-3 w-3 mr-1" />
+                            Sim
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-xs text-muted-foreground">
+                            <XCircle className="h-3 w-3 mr-1" />
+                            Não
+                          </Badge>
+                        )}
+                      </TableCell>
+                    )}
                     <TableCell className="text-sm">{variacao.estoque}</TableCell>
                     <TableCell>
                       <Badge variant={variacao.ativo ? 'default' : 'secondary'} className="text-xs">
@@ -951,7 +1060,7 @@ export default function ProdutosPage() {
                   </TableRow>
                   )
                 })}
-              </>
+              </Fragment>
             ))}
           </TableBody>
         </Table>

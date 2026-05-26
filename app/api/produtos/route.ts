@@ -26,6 +26,9 @@ export const GET = withAuth(async (req, { userId }) => {
       orderBy: { nome: 'asc' },
       include: {
         atributos: true,
+        cubagens: {
+          select: { transportadoraId: true },
+        },
         produtoPai: {
           select: {
             id: true,
@@ -38,10 +41,13 @@ export const GET = withAuth(async (req, { userId }) => {
         variacoes: {
           include: {
             atributos: true,
+            cubagens: {
+              select: { transportadoraId: true },
+            },
           },
         },
         _count: {
-          select: { 
+          select: {
             cubagens: true,
             variacoes: true,
           },
