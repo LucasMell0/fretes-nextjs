@@ -9,7 +9,7 @@ const buscarProduto: Tool<BuscarProdutoArgs> = {
     type: 'function',
     function: {
       name: 'buscar_produto',
-      description: 'Busca produtos do usuário por nome ou SKU usando substring case-insensitive. Cada palavra da query deve aparecer no nome ou SKU. Retorna id, nome, sku, peso, cubagem, estoque, ativo. Para listar mais produtos quando os primeiros não tiveram o que o usuário procura, suba o "limite" — máximo 50.',
+      description: 'Busca produtos do usuário por nome ou SKU. Retorna os produtos mais relevantes onde PELO MENOS UMA das palavras da query aparece no nome ou SKU, ordenados por quantas palavras casaram (campo "palavrasCasadas") — quanto maior, mais relevante. Tolerante a palavras extras que o usuário coloque mesmo sem estarem no nome. Use os resultados pra confirmar com o usuário qual produto ele quer antes de cotar.',
       parameters: {
         type: 'object',
         properties: {
@@ -27,46 +27,56 @@ const buscarProduto: Tool<BuscarProdutoArgs> = {
     if (palavras.length === 0) {
       return { total: 0, produtos: [], aviso: 'Query vazia' }
     }
-    const produtos = await prisma.produto.findMany({
-      where: {
-        usuarioId: userId,
-        ativo: true,
-        AND: palavras.map(p => ({
-          OR: [
-            { nome: { contains: p, mode: 'insensitive' as const } },
-            { sku: { contains: p, mode: 'insensitive' as const } },
-          ],
-        })),
-      },
+
+    // Busca: pelo menos UMA palavra casa em nome OU sku (busca abrangente)
+    const where = {
+      usuarioId: userId,
+      ativo: true,
+      OR: palavras.flatMap(p => [
+        { nome: { contains: p, mode: 'insensitive' as const } },
+        { sku: { contains: p, mode: 'insensitive' as const } },
+      ]),
+    }
+
+    // Pega um pool maior pra rankear (até 5x o limite final), aí ordena por relevância
+    const pool = await prisma.produto.findMany({
+      where,
       select: { id: true, nome: true, sku: true, peso: true, cubagem: true, estoque: true, ativo: true },
-      orderBy: { nome: 'asc' },
-      take: max,
+      take: Math.max(max * 5, 100),
     })
 
-    // Verifica se há mais resultados (pra avisar o LLM)
-    const totalAproximado = produtos.length === max
-      ? await prisma.produto.count({
-          where: {
-            usuarioId: userId,
-            ativo: true,
-            AND: palavras.map(p => ({
-              OR: [
-                { nome: { contains: p, mode: 'insensitive' as const } },
-                { sku: { contains: p, mode: 'insensitive' as const } },
-              ],
-            })),
-          },
-        })
-      : produtos.length
+    // Ranking: score = nº de palavras (case-insensitive) que aparecem no nome+sku.
+    // Empate desempata por menor nome (mais "específico").
+    const palavrasLower = palavras.map(p => p.toLowerCase())
+    const scored = pool.map(p => {
+      const haystack = `${p.nome} ${p.sku}`.toLowerCase()
+      const score = palavrasLower.filter(pal => haystack.includes(pal)).length
+      return { p, score }
+    })
+    scored.sort((a, b) =>
+      b.score - a.score
+      || a.p.nome.length - b.p.nome.length
+      || a.p.nome.localeCompare(b.p.nome)
+    )
 
+    // Conta total no banco pra informar truncamento
+    const totalMatch = await prisma.produto.count({ where })
+
+    const top = scored.slice(0, max)
     return {
-      total: produtos.length,
-      totalMatch: totalAproximado,
-      truncado: totalAproximado > produtos.length,
-      produtos: produtos.map(p => ({
-        ...p,
+      total: top.length,
+      totalMatch,
+      truncado: totalMatch > top.length,
+      palavrasBuscadas: palavras,
+      produtos: top.map(({ p, score }) => ({
+        id: p.id,
+        sku: p.sku,
+        nome: p.nome,
         peso: Number(p.peso),
         cubagem: Number(p.cubagem),
+        estoque: p.estoque,
+        ativo: p.ativo,
+        palavrasCasadas: score,
       })),
     }
   },
