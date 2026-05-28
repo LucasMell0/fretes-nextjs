@@ -374,51 +374,60 @@ function EstadoVazio({ onUsarTemplate }: { onUsarTemplate: (agente: Agente, prom
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-6">
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <Wrench className="h-4 w-4 text-primary" />
-              <h3 className="font-semibold">Escrita</h3>
-            </div>
-            <p className="text-xs text-muted-foreground mb-3">
-              Cria, edita e exclui dados — sempre com aprovação antes de aplicar.
-            </p>
-            <div className="space-y-2">
-              {TEMPLATES.ESCRITA.map((t) => (
-                <button
-                  key={t.titulo}
-                  onClick={() => onUsarTemplate('ESCRITA', t.prompt)}
-                  className="w-full text-left rounded-lg border p-3 hover:bg-accent transition-colors"
-                >
-                  <div className="font-medium text-sm">{t.titulo}</div>
-                  <div className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{t.prompt}</div>
-                </button>
-              ))}
-            </div>
-          </div>
+        {(() => {
+          const linhas = Math.max(TEMPLATES.ESCRITA.length, TEMPLATES.CONSULTA.length)
+          return (
+            <div className="grid md:grid-cols-2 gap-x-6 gap-y-3 items-stretch">
+              {/* Cabeçalhos */}
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <Wrench className="h-4 w-4 text-primary" />
+                  <h3 className="font-semibold">Escrita</h3>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Cria, edita e exclui dados — sempre com aprovação antes de aplicar.
+                </p>
+              </div>
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <Search className="h-4 w-4 text-primary" />
+                  <h3 className="font-semibold">Consulta</h3>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Cota fretes, diagnostica, audita configuração. Não altera dados.
+                </p>
+              </div>
 
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <Search className="h-4 w-4 text-primary" />
-              <h3 className="font-semibold">Consulta</h3>
+              {/* Cards intercalados (esquerda Escrita, direita Consulta) — mesma linha estica até o card mais alto */}
+              {Array.from({ length: linhas }).flatMap((_, i) => {
+                const e = TEMPLATES.ESCRITA[i]
+                const c = TEMPLATES.CONSULTA[i]
+                return [
+                  e ? (
+                    <button
+                      key={`e-${i}`}
+                      onClick={() => onUsarTemplate('ESCRITA', e.prompt)}
+                      className="text-left rounded-lg border p-3 hover:bg-accent transition-colors h-full flex flex-col"
+                    >
+                      <div className="font-medium text-sm">{e.titulo}</div>
+                      <div className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{e.prompt}</div>
+                    </button>
+                  ) : <div key={`e-${i}`} />,
+                  c ? (
+                    <button
+                      key={`c-${i}`}
+                      onClick={() => onUsarTemplate('CONSULTA', c.prompt)}
+                      className="text-left rounded-lg border p-3 hover:bg-accent transition-colors h-full flex flex-col"
+                    >
+                      <div className="font-medium text-sm">{c.titulo}</div>
+                      <div className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{c.prompt}</div>
+                    </button>
+                  ) : <div key={`c-${i}`} />,
+                ]
+              })}
             </div>
-            <p className="text-xs text-muted-foreground mb-3">
-              Cota fretes, diagnostica, audita configuração. Não altera dados.
-            </p>
-            <div className="space-y-2">
-              {TEMPLATES.CONSULTA.map((t) => (
-                <button
-                  key={t.titulo}
-                  onClick={() => onUsarTemplate('CONSULTA', t.prompt)}
-                  className="w-full text-left rounded-lg border p-3 hover:bg-accent transition-colors"
-                >
-                  <div className="font-medium text-sm">{t.titulo}</div>
-                  <div className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{t.prompt}</div>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
+          )
+        })()}
       </div>
     </div>
   )

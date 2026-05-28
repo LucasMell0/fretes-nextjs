@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/components/ui/use-toast'
-import { Sparkles, Loader2, Send, User, Search, Wrench, ChevronDown, ChevronRight } from 'lucide-react'
+import { Sparkles, Loader2, Send, User, Search, Wrench, ChevronDown, ChevronRight, Paperclip, X, FileText } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { PlanoMudancas } from './plano-mudancas'
 
@@ -62,8 +62,35 @@ export function ChatView({ conversa, onMensagemEnviada }: ChatViewProps) {
   const [loadingHist, setLoadingHist] = useState(true)
   const [loadingMsg, setLoadingMsg] = useState(MENSAGENS_LOADING[0])
   const [toolCallsAtuais, setToolCallsAtuais] = useState<ToolCallRegistrada[]>([])
+  const [arquivos, setArquivos] = useState<File[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const MAX_ARQUIVOS = 3
+  const MAX_BYTES = 5 * 1024 * 1024
+  const TIPOS_ACEITOS = '.csv,.xlsx,.xls,.pdf,.txt'
+
+  const adicionarArquivos = (lista: FileList | null) => {
+    if (!lista) return
+    const novos: File[] = []
+    for (const f of Array.from(lista)) {
+      if (f.size > MAX_BYTES) {
+        toast({ variant: 'destructive', title: 'Arquivo muito grande', description: `${f.name} excede 5MB` })
+        continue
+      }
+      novos.push(f)
+    }
+    const combinados = [...arquivos, ...novos].slice(0, MAX_ARQUIVOS)
+    if (arquivos.length + novos.length > MAX_ARQUIVOS) {
+      toast({ title: `Máximo de ${MAX_ARQUIVOS} arquivos por mensagem` })
+    }
+    setArquivos(combinados)
+  }
+
+  const removerArquivo = (idx: number) => {
+    setArquivos(arquivos.filter((_, i) => i !== idx))
+  }
 
   // Rotaciona mensagens de loading
   useEffect(() => {
@@ -111,22 +138,39 @@ export function ChatView({ conversa, onMensagemEnviada }: ChatViewProps) {
 
   const enviar = async () => {
     const texto = input.trim()
-    if (!texto || enviando) return
+    if ((!texto && arquivos.length === 0) || enviando) return
 
+    const arquivosEnvio = arquivos
+    const textoFinal = texto || (arquivosEnvio.length > 0 ? 'Analise o(s) arquivo(s) anexado(s).' : '')
     setInput('')
+    setArquivos([])
     setEnviando(true)
     setToolCallsAtuais([])
 
-    const userMsg: MensagemUI = { id: `tmp-user-${Date.now()}`, role: 'user', conteudo: texto }
+    const conteudoExibicao = textoFinal + (arquivosEnvio.length > 0
+      ? `\n\n📎 ${arquivosEnvio.map(a => a.name).join(', ')}`
+      : '')
+    const userMsg: MensagemUI = { id: `tmp-user-${Date.now()}`, role: 'user', conteudo: conteudoExibicao }
     const assistantMsg: MensagemUI = { id: `tmp-asst-${Date.now()}`, role: 'assistant', conteudo: '', pendente: true }
     setMensagens(prev => [...prev, userMsg, assistantMsg])
 
     try {
-      const res = await fetch(`/api/assistente/conversas/${conversa.id}/mensagens`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ conteudo: texto }),
-      })
+      let res: Response
+      if (arquivosEnvio.length > 0) {
+        const form = new FormData()
+        form.append('conteudo', textoFinal)
+        arquivosEnvio.forEach(a => form.append('arquivos', a))
+        res = await fetch(`/api/assistente/conversas/${conversa.id}/mensagens`, {
+          method: 'POST',
+          body: form,
+        })
+      } else {
+        res = await fetch(`/api/assistente/conversas/${conversa.id}/mensagens`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ conteudo: textoFinal }),
+        })
+      }
       if (!res.ok) {
         const erro = await res.json().catch(() => ({ erro: 'Erro desconhecido' }))
         const titulo = res.status === 429 ? 'Cota mensal esgotada' : 'Erro ao enviar'
@@ -279,24 +323,69 @@ export function ChatView({ conversa, onMensagemEnviada }: ChatViewProps) {
       </div>
 
       <div className="border-t p-3">
-        <div className="flex gap-2 items-end max-w-4xl mx-auto">
-          <Textarea
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKey}
-            placeholder={
-              conversa.agente === 'CONSULTA'
-                ? 'Pergunte sobre cotações, transportadoras, produtos…'
-                : 'Descreva o que quer criar/editar/excluir… (em breve)'
-            }
-            rows={2}
-            className="resize-none flex-1"
-            disabled={enviando}
-          />
-          <Button onClick={enviar} disabled={enviando || !input.trim()}>
-            {enviando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-          </Button>
+        <div className="max-w-4xl mx-auto space-y-2">
+          {arquivos.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {arquivos.map((arq, i) => (
+                <div
+                  key={`${arq.name}-${i}`}
+                  className="flex items-center gap-1.5 rounded-md border bg-muted/40 pl-2 pr-1 py-0.5 text-xs"
+                >
+                  <FileText className="h-3 w-3 text-muted-foreground" />
+                  <span className="max-w-[200px] truncate">{arq.name}</span>
+                  <span className="text-muted-foreground">{Math.round(arq.size / 1024)}KB</span>
+                  <button
+                    onClick={() => removerArquivo(i)}
+                    className="text-muted-foreground hover:text-destructive p-0.5"
+                    aria-label="Remover"
+                    disabled={enviando}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex gap-2 items-end">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={TIPOS_ACEITOS}
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                adicionarArquivos(e.target.files)
+                if (fileInputRef.current) fileInputRef.current.value = ''
+              }}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={enviando || arquivos.length >= MAX_ARQUIVOS}
+              title="Anexar arquivo (xlsx, csv, pdf, txt — até 5MB)"
+            >
+              <Paperclip className="h-4 w-4" />
+            </Button>
+            <Textarea
+              ref={inputRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKey}
+              placeholder={
+                conversa.agente === 'CONSULTA'
+                  ? 'Pergunte sobre cotações, transportadoras, produtos…'
+                  : 'Descreva o que quer criar/editar/excluir…'
+              }
+              rows={2}
+              className="resize-none flex-1"
+              disabled={enviando}
+            />
+            <Button onClick={enviar} disabled={enviando || (!input.trim() && arquivos.length === 0)}>
+              {enviando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            </Button>
+          </div>
         </div>
       </div>
     </div>

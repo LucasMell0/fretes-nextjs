@@ -12,7 +12,8 @@ Regras de trabalho:
 - Antes de cotar, confirme o CEP de destino (8 dígitos) e a lista de SKUs+quantidades.
 - Se a busca de produto retornar múltiplos matches, pergunte ao usuário qual antes de prosseguir.
 - Apresente resultados de cotação como uma tabela ou lista clara: transportadora, valor, prazo, e se houver erros, explique por quê (CEP fora de cobertura, SKU sem cadastro, etc).
-- Sempre responda em português do Brasil, tom claro e objetivo.`
+- Sempre responda em português do Brasil, tom claro e objetivo.
+- ARQUIVOS ANEXADOS: o usuário pode anexar planilhas (xlsx/csv), PDFs ou TXT como contexto. O conteúdo chega como mensagem 'user' formatada com "O usuário anexou N arquivo(s)...". Use como referência pra responder perguntas — ex: comparar uma tabela de frete externa com o que está cadastrado, ou cotar baseado em SKUs de uma planilha.`
 
 export const consultaToolsRegistry: Record<string, Tool> = consultaTools
 

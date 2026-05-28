@@ -7,8 +7,11 @@ import { logger } from '@/lib/logger'
 import { parseRouteId, getSessionUserId } from '@/lib/utils/parse'
 import { rodarAgenteConsulta, type ChatTurn } from '@/lib/ai/agente-consulta'
 import { rodarAgenteEscrita } from '@/lib/ai/agente-escrita'
+import { extrairArquivo, formatarArquivosParaPrompt, type ExtracaoResultado } from '@/lib/ai/extrair-arquivo'
 import type { Prisma } from '@prisma/client'
 import type { Operacao } from '@/lib/ai/operacoes/schemas'
+
+const MAX_ARQUIVOS_POR_MENSAGEM = 3
 
 interface RouteParams { id: string }
 
@@ -75,8 +78,35 @@ export async function POST(
     )
   }
 
-  const body = await req.json()
-  const validation = enviarMensagemSchema.safeParse(body)
+  // Aceita JSON ou multipart (multipart é usado quando há arquivos anexados)
+  const contentType = req.headers.get('content-type') || ''
+  let conteudoUsuario: string
+  let arquivosExtraidos: ExtracaoResultado[] = []
+
+  if (contentType.includes('multipart/form-data')) {
+    const form = await req.formData()
+    conteudoUsuario = String(form.get('conteudo') || '')
+    const arquivos = form.getAll('arquivos').filter((v): v is File => v instanceof File)
+    if (arquivos.length > MAX_ARQUIVOS_POR_MENSAGEM) {
+      return NextResponse.json(
+        { erro: `Máximo de ${MAX_ARQUIVOS_POR_MENSAGEM} arquivos por mensagem` },
+        { status: 400 }
+      )
+    }
+    try {
+      for (const arq of arquivos) {
+        arquivosExtraidos.push(await extrairArquivo(arq))
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Erro ao processar arquivo'
+      return NextResponse.json({ erro: msg }, { status: 400 })
+    }
+  } else {
+    const body = await req.json()
+    conteudoUsuario = body?.conteudo || ''
+  }
+
+  const validation = enviarMensagemSchema.safeParse({ conteudo: conteudoUsuario })
   if (!validation.success) {
     return NextResponse.json(
       { erro: 'Dados inválidos', detalhes: validation.error.errors },
@@ -129,6 +159,14 @@ export async function POST(
     }
     return { role: 'user', content: m.conteudo }
   })
+
+  // Injeta conteúdo dos arquivos como mensagem 'user' adicional ANTES da pergunta real,
+  // pra que o LLM consiga referenciar.
+  if (arquivosExtraidos.length > 0) {
+    const contexto = formatarArquivosParaPrompt(arquivosExtraidos)
+    // Insere logo antes da última mensagem (que é a do usuário atual)
+    historico.splice(historico.length - 1, 0, { role: 'user', content: contexto })
+  }
 
   // SSE streaming
   const encoder = new TextEncoder()
