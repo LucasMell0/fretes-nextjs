@@ -39,7 +39,7 @@ export const IndicadorCota = forwardRef<IndicadorCotaRef>(function IndicadorCota
   const zerado = uso.restantes === 0
 
   return (
-    <div className="border-t p-3 text-xs">
+    <div className="border-t p-3 text-xs shrink-0 flex flex-col justify-center min-h-[5rem]">
       <div className="flex items-center justify-between mb-1.5">
         <div className="flex items-center gap-1.5 text-muted-foreground">
           {zerado ? (

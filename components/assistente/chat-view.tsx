@@ -322,8 +322,8 @@ export function ChatView({ conversa, onMensagemEnviada }: ChatViewProps) {
         )}
       </div>
 
-      <div className="border-t p-3">
-        <div className="max-w-4xl mx-auto space-y-2">
+      <div className="border-t p-3 shrink-0 flex flex-col justify-center min-h-[5rem]">
+        <div className="space-y-2">
           {arquivos.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
               {arquivos.map((arq, i) => (
