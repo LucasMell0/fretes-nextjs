@@ -139,9 +139,9 @@ export default function AssistentePage() {
   const conversasConsulta = conversas.filter(c => c.agente === 'CONSULTA')
 
   return (
-    <div className="flex h-[calc(100vh-4rem)]">
+    <div className="flex h-full -m-4 min-h-0 overflow-hidden">
       {/* Sidebar de conversas */}
-      <aside className="w-72 border-r flex flex-col">
+      <aside className="w-72 border-r flex flex-col min-h-0">
         <div className="p-3 border-b space-y-2">
           <Button
             onClick={() => criarConversa('ESCRITA')}
@@ -229,7 +229,7 @@ export default function AssistentePage() {
       </aside>
 
       {/* Main area */}
-      <main className="flex-1 flex flex-col">
+      <main className="flex-1 flex flex-col min-h-0 min-w-0">
         {conversaAtiva ? (
           <ChatView
             key={conversaAtiva.id}
