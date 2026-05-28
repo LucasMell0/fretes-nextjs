@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/use-toast'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
-import { Sparkles, Pencil, Plus, Trash2, MessageSquare, Loader2, Wrench, Search } from 'lucide-react'
+import { Sparkles, Pencil, Trash2, MessageSquare, Loader2, Wrench, Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   DropdownMenu,
@@ -14,6 +14,7 @@ import {
   DropdownMenuItem,
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
+import { ChatView } from '@/components/assistente/chat-view'
 
 type Agente = 'ESCRITA' | 'CONSULTA'
 
@@ -227,16 +228,27 @@ export default function AssistentePage() {
       {/* Main area */}
       <main className="flex-1 flex flex-col">
         {conversaAtiva ? (
-          <PlaceholderChat conversa={conversaAtiva} />
+          <ChatView key={conversaAtiva.id} conversa={conversaAtiva} />
         ) : (
-          <EstadoVazio onUsarTemplate={(agente, prompt) => {
-            // Cria conversa e injeta o template como prompt inicial (Fase 1 vai consumir)
-            void criarConversa(agente)
-            // Por enquanto, só mostra toast — o input do chat ainda nao existe
-            toast({
-              title: 'Conversa criada',
-              description: 'O chat será habilitado na próxima fase. Template: ' + prompt.slice(0, 60) + '...',
-            })
+          <EstadoVazio onUsarTemplate={async (agente, prompt) => {
+            // Cria conversa nova e abre com o prompt pré-preenchido (via query string)
+            try {
+              setCriando(agente)
+              const res = await fetch('/api/assistente/conversas', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ agente }),
+              })
+              if (!res.ok) throw new Error()
+              const c: Conversa = await res.json()
+              setConversas([c, ...conversas])
+              setConversaAtivaId(c.id)
+              router.replace(`/dashboard/assistente?conversa=${c.id}&prompt=${encodeURIComponent(prompt)}`)
+            } catch {
+              toast({ variant: 'destructive', title: 'Erro ao criar conversa' })
+            } finally {
+              setCriando(null)
+            }
           }} />
         )}
       </main>
@@ -339,21 +351,6 @@ function ListaConversas({
           </div>
         ))}
       </div>
-    </div>
-  )
-}
-
-function PlaceholderChat({ conversa }: { conversa: Conversa }) {
-  return (
-    <div className="flex-1 flex flex-col items-center justify-center text-center p-8 text-muted-foreground">
-      <Sparkles className="h-12 w-12 mb-4 opacity-40" />
-      <h3 className="text-lg font-semibold mb-1">{conversa.titulo}</h3>
-      <p className="text-sm">
-        Esta é uma conversa de <strong>{conversa.agente === 'ESCRITA' ? 'Escrita' : 'Consulta'}</strong>.
-      </p>
-      <p className="text-xs mt-4 max-w-md">
-        O chat será habilitado na próxima fase da implementação. Por enquanto você pode criar, renomear e excluir conversas.
-      </p>
     </div>
   )
 }
