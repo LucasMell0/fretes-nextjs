@@ -81,7 +81,7 @@ export async function POST(
   // Aceita JSON ou multipart (multipart é usado quando há arquivos anexados)
   const contentType = req.headers.get('content-type') || ''
   let conteudoUsuario: string
-  let arquivosExtraidos: ExtracaoResultado[] = []
+  const arquivosExtraidos: ExtracaoResultado[] = []
 
   if (contentType.includes('multipart/form-data')) {
     const form = await req.formData()
