@@ -251,7 +251,13 @@ const proporCriarRegiao = makeAcumuladora(
     type: 'object',
     properties: {
       tipo: { type: 'string', enum: ['criar_regiao'] },
-      transportadoraId: { type: 'integer' },
+      transportadoraId: {
+        description: 'ID numérico de uma transportadora EXISTENTE, ou placeholder "@criar_transportadora:NOME" pra referenciar uma criada no MESMO plano.',
+        oneOf: [
+          { type: 'integer' },
+          { type: 'string', pattern: '^@criar_transportadora:.+' },
+        ],
+      },
       nome: { type: 'string' },
       cepInicio: { type: 'string', description: 'CEP no formato 00000-000 ou 00000000' },
       cepFim: { type: 'string' },
@@ -302,7 +308,13 @@ const proporCriarFaixaPeso = makeAcumuladora(
     type: 'object',
     properties: {
       tipo: { type: 'string', enum: ['criar_faixa_peso'] },
-      regiaoId: { type: 'integer' },
+      regiaoId: {
+        description: 'ID numérico de uma região EXISTENTE, ou placeholder "@criar_regiao:NOME" pra referenciar uma região que está sendo criada no MESMO plano.',
+        oneOf: [
+          { type: 'integer' },
+          { type: 'string', pattern: '^@criar_regiao:.+' },
+        ],
+      },
       pesoInicial: { type: 'number' },
       pesoFinal: { type: 'number' },
       valor: { type: 'number' },
@@ -354,7 +366,13 @@ const proporDefinirKgAdicional = makeAcumuladora(
     type: 'object',
     properties: {
       tipo: { type: 'string', enum: ['definir_kg_adicional'] },
-      regiaoId: { type: 'integer' },
+      regiaoId: {
+        description: 'ID numérico de uma região EXISTENTE, ou placeholder "@criar_regiao:NOME" pra referenciar uma região que está sendo criada no MESMO plano.',
+        oneOf: [
+          { type: 'integer' },
+          { type: 'string', pattern: '^@criar_regiao:.+' },
+        ],
+      },
       valorKgAdicional: { type: 'number' },
     },
     required: ['tipo', 'regiaoId', 'valorKgAdicional'],
@@ -369,7 +387,13 @@ const proporDefinirTaxas = makeAcumuladora(
     type: 'object',
     properties: {
       tipo: { type: 'string', enum: ['definir_taxas'] },
-      regiaoId: { type: 'integer' },
+      regiaoId: {
+        description: 'ID numérico de uma região EXISTENTE, ou placeholder "@criar_regiao:NOME" pra referenciar uma região que está sendo criada no MESMO plano.',
+        oneOf: [
+          { type: 'integer' },
+          { type: 'string', pattern: '^@criar_regiao:.+' },
+        ],
+      },
       frete: { type: 'object', properties: { tipo: { type: 'string', enum: ['PERCENTUAL', 'VALOR'] }, valor: { type: 'number' }, minimo: { type: 'number' } } },
       gris: { type: 'object', properties: { tipo: { type: 'string', enum: ['PERCENTUAL', 'VALOR'] }, valor: { type: 'number' }, minimo: { type: 'number' } } },
       despacho: { type: 'object', properties: { tipo: { type: 'string', enum: ['PERCENTUAL', 'VALOR'] }, valor: { type: 'number' }, minimo: { type: 'number' } } },

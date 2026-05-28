@@ -16,6 +16,10 @@ Regras de trabalho:
 
 0b. KG ADICIONAL: o valor de kg adicional NORMALMENTE não vem direto na planilha — vem como "valor por tonelada" ou "excedente por tonelada". Para obter o valor por kg adicional, leia o valor por tonelada DA PLANILHA DO USUÁRIO e DIVIDA por 1000. Mostre o cálculo na seção 0a usando o número real da planilha (NÃO use exemplos hipotéticos do prompt). Se a planilha não tem coluna de tonelada/excedente, PERGUNTE ao usuário em vez de chutar.
 
+0c1. NÃO DUPLIQUE TOOLS NO MESMO PLANO. Cada operação aparece UMA VEZ. Se você já chamou propor_definir_taxas pra uma região, não chame de novo no mesmo plano. Se precisa AJUSTAR uma proposta anterior, peça pro usuário desmarcá-la na interface (você não pode "desfazer" uma tool já chamada). Idem pra propor_criar_regiao, propor_definir_kg_adicional, etc.
+
+0c2. ORDEM IMPORTA: tools que CRIAM (criar_regiao, criar_transportadora) DEVEM ser chamadas ANTES das tools que dependem do ID (criar_faixa_peso, definir_kg_adicional, definir_taxas). Depois, ao referenciar o ID, use SEMPRE o placeholder string "@criar_regiao:NOME" — nunca o número 0, nunca um ID inventado. Exemplo: criar uma região "FOO", depois faixas usando regiaoId: "@criar_regiao:FOO".
+
 0c. PROIBIDO COPIAR NÚMEROS DESTE PROMPT. Qualquer número que aparece neste system prompt é exemplo de FORMATO, nunca de valor a usar. Os valores reais vêm SEMPRE da planilha anexada, da resposta de uma tool, ou do que o usuário escreveu no chat. Se você usar um número que não consegue rastrear a uma dessas três fontes, é alucinação — pare e pergunte.
 
 0d. PLANILHAS COM MÚLTIPLAS REGIÕES/UFs: tabelas de frete tipicamente listam várias UFs (uma linha ou bloco por estado/região). Quando o usuário pede pra cadastrar UMA região específica (ex: "CE - Capital", "Salvador"), você DEVE:
@@ -146,7 +150,21 @@ export async function* rodarAgenteEscrita(
   }
 
   if (planoAcc.length > 0) {
-    yield { tipo: 'plano', operacoes: [...planoAcc] }
+    // Deduplica operações idempotentes do mesmo alvo: definir_taxas/definir_kg_adicional
+    // são upserts; se o LLM chamar duas vezes pro mesmo regiaoId, mantém só a última.
+    const ultimaPorChave = new Map<string, number>()
+    planoAcc.forEach((op, i) => {
+      if (op.tipo === 'definir_taxas' || op.tipo === 'definir_kg_adicional') {
+        const chave = `${op.tipo}:${op.regiaoId}`
+        ultimaPorChave.set(chave, i)
+      }
+    })
+    const planoFinal = planoAcc.filter((op, i) => {
+      if (op.tipo !== 'definir_taxas' && op.tipo !== 'definir_kg_adicional') return true
+      const chave = `${op.tipo}:${op.regiaoId}`
+      return ultimaPorChave.get(chave) === i
+    })
+    yield { tipo: 'plano', operacoes: planoFinal }
   }
   yield { tipo: 'final', text: textoFinal }
 }

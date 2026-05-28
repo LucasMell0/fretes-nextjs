@@ -40,9 +40,25 @@ function planilhaParaTexto(buffer: Buffer): string {
   const partes: string[] = []
   for (const nomeAba of wb.SheetNames) {
     const aba = wb.Sheets[nomeAba]
-    const csv = XLSX.utils.sheet_to_csv(aba, { blankrows: false })
-    if (!csv.trim()) continue
-    partes.push(`# Aba: ${nomeAba}\n${csv}`)
+    // Lê como matriz de linhas/colunas
+    const matriz = XLSX.utils.sheet_to_json<unknown[]>(aba, { header: 1, blankrows: false, defval: '' })
+    if (matriz.length === 0) continue
+
+    // Detecta quantas colunas relevantes existem
+    const numCols = Math.max(...matriz.map(r => r.length))
+    const linhas: string[] = []
+    for (let i = 0; i < matriz.length; i++) {
+      const row = matriz[i]
+      const celulas = Array.from({ length: numCols }, (_, j) => {
+        const v = row[j]
+        if (v === undefined || v === null || v === '') return ''
+        return String(v).replace(/\s+/g, ' ').trim()
+      })
+      // Pula linha se TODAS as células estão vazias
+      if (celulas.every(c => !c)) continue
+      linhas.push(`Linha ${i + 1}: [${celulas.map(c => JSON.stringify(c)).join(', ')}]`)
+    }
+    partes.push(`# Aba: ${nomeAba} (${linhas.length} linhas com conteúdo, ${numCols} colunas)\n${linhas.join('\n')}`)
   }
   return partes.join('\n\n')
 }
