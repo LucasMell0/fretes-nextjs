@@ -6,7 +6,9 @@ import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
 import { parseRouteId, getSessionUserId } from '@/lib/utils/parse'
 import { rodarAgenteConsulta, type ChatTurn } from '@/lib/ai/agente-consulta'
+import { rodarAgenteEscrita } from '@/lib/ai/agente-escrita'
 import type { Prisma } from '@prisma/client'
+import type { Operacao } from '@/lib/ai/operacoes/schemas'
 
 interface RouteParams { id: string }
 
@@ -128,13 +130,6 @@ export async function POST(
     return { role: 'user', content: m.conteudo }
   })
 
-  if (conversa.agente !== 'CONSULTA') {
-    return NextResponse.json(
-      { erro: 'Apenas conversas de Consulta estão habilitadas no momento. Agente de Escrita virá na próxima fase.' },
-      { status: 400 }
-    )
-  }
-
   // SSE streaming
   const encoder = new TextEncoder()
   const stream = new ReadableStream({
@@ -143,14 +138,18 @@ export async function POST(
         controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`))
       }
 
-      // Identificadores das tool calls do round atual, pra persistir junto com o assistant
       let textoAcumulado = ''
       const toolCallsExec: Array<{ id: string; name: string; args: unknown; result: unknown }> = []
+      let planoFinal: Operacao[] = []
 
       try {
         send('user_message', { id: mensagemUsuario.id, conteudo: mensagemUsuario.conteudo })
 
-        for await (const evt of rodarAgenteConsulta(historico, { userId })) {
+        const gerador = conversa.agente === 'CONSULTA'
+          ? rodarAgenteConsulta(historico, { userId })
+          : rodarAgenteEscrita(historico, { userId })
+
+        for await (const evt of gerador) {
           if (evt.tipo === 'token') {
             textoAcumulado += evt.delta
             send('token', { delta: evt.delta })
@@ -161,27 +160,29 @@ export async function POST(
             send('tool_result', { name: evt.name, result: evt.result })
             const pendente = [...toolCallsExec].reverse().find(t => t.name === evt.name && t.result === null)
             if (pendente) pendente.result = evt.result
+          } else if (evt.tipo === 'plano') {
+            planoFinal = evt.operacoes
+            send('plano', { operacoes: evt.operacoes })
           } else if (evt.tipo === 'final') {
             textoAcumulado = evt.text || textoAcumulado
             send('final', { text: textoAcumulado })
           }
         }
 
-        // Persiste o turno do assistant (texto final + tool calls em JSON acessório)
         const assistantMsg = await prisma.assistenteMensagem.create({
           data: {
             conversaId,
             role: 'ASSISTANT',
             conteudo: textoAcumulado,
-            toolCalls: toolCallsExec.length > 0
-              ? ({ executadas: toolCallsExec } as Prisma.InputJsonValue)
+            toolCalls: (toolCallsExec.length > 0 || planoFinal.length > 0)
+              ? ({ executadas: toolCallsExec, plano: planoFinal } as unknown as Prisma.InputJsonValue)
               : undefined,
           },
         })
 
         send('done', { id: assistantMsg.id })
       } catch (e) {
-        logger.error('Erro no streaming do Agente de Consulta:', e)
+        logger.error('Erro no streaming do agente:', e)
         send('error', { mensagem: e instanceof Error ? e.message : 'Erro desconhecido' })
       } finally {
         controller.close()

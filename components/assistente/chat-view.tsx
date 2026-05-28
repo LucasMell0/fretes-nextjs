@@ -6,6 +6,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/components/ui/use-toast'
 import { Sparkles, Loader2, Send, User, Search, Wrench, ChevronDown, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { PlanoMudancas } from './plano-mudancas'
 
 type Agente = 'ESCRITA' | 'CONSULTA'
 
@@ -19,7 +20,7 @@ interface MensagemBackend {
   id: number
   role: 'USER' | 'ASSISTANT' | 'TOOL'
   conteudo: string
-  toolCalls?: { executadas?: ToolCallRegistrada[] } | null
+  toolCalls?: { executadas?: ToolCallRegistrada[]; plano?: OperacaoBruta[] } | null
   dataCriacao: string
 }
 
@@ -29,11 +30,14 @@ interface ToolCallRegistrada {
   result: unknown
 }
 
+type OperacaoBruta = Record<string, unknown> & { tipo: string }
+
 interface MensagemUI {
   id: string
   role: 'user' | 'assistant'
   conteudo: string
   toolCalls?: ToolCallRegistrada[]
+  plano?: OperacaoBruta[]
   pendente?: boolean
 }
 
@@ -45,7 +49,12 @@ const MENSAGENS_LOADING = [
   'Quase lá…',
 ]
 
-export function ChatView({ conversa }: { conversa: Conversa }) {
+interface ChatViewProps {
+  conversa: Conversa
+  onMensagemEnviada?: () => void
+}
+
+export function ChatView({ conversa, onMensagemEnviada }: ChatViewProps) {
   const { toast } = useToast()
   const [mensagens, setMensagens] = useState<MensagemUI[]>([])
   const [input, setInput] = useState('')
@@ -86,6 +95,7 @@ export function ChatView({ conversa }: { conversa: Conversa }) {
           role: m.role === 'USER' ? 'user' : 'assistant',
           conteudo: m.conteudo,
           toolCalls: m.toolCalls?.executadas,
+          plano: m.toolCalls?.plano,
         }))
       setMensagens(ui)
     } catch {
@@ -103,15 +113,6 @@ export function ChatView({ conversa }: { conversa: Conversa }) {
     const texto = input.trim()
     if (!texto || enviando) return
 
-    if (conversa.agente === 'ESCRITA') {
-      toast({
-        title: 'Agente de Escrita ainda não disponível',
-        description: 'A interface de chat para escrita virá em fase posterior. Por enquanto, use uma conversa de Consulta.',
-        variant: 'destructive',
-      })
-      return
-    }
-
     setInput('')
     setEnviando(true)
     setToolCallsAtuais([])
@@ -128,9 +129,13 @@ export function ChatView({ conversa }: { conversa: Conversa }) {
       })
       if (!res.ok) {
         const erro = await res.json().catch(() => ({ erro: 'Erro desconhecido' }))
-        throw new Error(erro.erro || 'Falha ao enviar mensagem')
+        const titulo = res.status === 429 ? 'Cota mensal esgotada' : 'Erro ao enviar'
+        toast({ variant: 'destructive', title: titulo, description: erro.erro || 'Falha ao enviar mensagem' })
+        setMensagens(prev => prev.filter(m => m.id !== assistantMsg.id))
+        return
       }
       if (!res.body) throw new Error('Resposta sem body')
+      onMensagemEnviada?.()
 
       // Parse SSE
       const reader = res.body.getReader()
@@ -138,6 +143,7 @@ export function ChatView({ conversa }: { conversa: Conversa }) {
       let buffer = ''
       let textoAccum = ''
       const toolsAccum: ToolCallRegistrada[] = []
+      let planoAccum: OperacaoBruta[] | undefined
 
       while (true) {
         const { value, done } = await reader.read()
@@ -170,13 +176,22 @@ export function ChatView({ conversa }: { conversa: Conversa }) {
             const pendente = [...toolsAccum].reverse().find(t => t.name === name && t.result === null)
             if (pendente) pendente.result = result
             setToolCallsAtuais([...toolsAccum])
+          } else if (eventName === 'plano') {
+            const { operacoes } = data as { operacoes: OperacaoBruta[] }
+            planoAccum = operacoes
           } else if (eventName === 'final') {
             const { text } = data as { text: string }
             textoAccum = text || textoAccum
           } else if (eventName === 'done') {
             setMensagens(prev => prev.map(m =>
               m.id === assistantMsg.id
-                ? { ...m, conteudo: textoAccum, toolCalls: toolsAccum.length > 0 ? toolsAccum : undefined, pendente: false }
+                ? {
+                    ...m,
+                    conteudo: textoAccum,
+                    toolCalls: toolsAccum.length > 0 ? toolsAccum : undefined,
+                    plano: planoAccum,
+                    pendente: false,
+                  }
                 : m
             ))
             setToolCallsAtuais([])
@@ -211,6 +226,9 @@ export function ChatView({ conversa }: { conversa: Conversa }) {
     )
   }
 
+  const turnosUsuario = mensagens.filter(m => m.role === 'user').length
+  const proximoLimite = turnosUsuario >= 80
+
   return (
     <div className="flex-1 flex flex-col min-h-0">
       <div className="border-b p-3 flex items-center gap-2">
@@ -223,6 +241,11 @@ export function ChatView({ conversa }: { conversa: Conversa }) {
         <span className="text-xs text-muted-foreground ml-2">
           {conversa.agente === 'ESCRITA' ? 'Agente de Escrita' : 'Agente de Consulta'}
         </span>
+        {proximoLimite && (
+          <span className="ml-auto text-xs text-amber-600">
+            {turnosUsuario}/100 turnos — considere começar uma nova conversa
+          </span>
+        )}
       </div>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-6">
@@ -233,7 +256,16 @@ export function ChatView({ conversa }: { conversa: Conversa }) {
           </div>
         )}
         {mensagens.map(m => (
-          <MensagemBolha key={m.id} mensagem={m} />
+          <MensagemBolha
+            key={m.id}
+            mensagem={m}
+            conversaId={conversa.id}
+            onPlanoAplicado={() => {
+              // Marca o plano como "aplicado" removendo do objeto da mensagem
+              setMensagens(prev => prev.map(x => x.id === m.id ? { ...x, plano: undefined } : x))
+              onMensagemEnviada?.()
+            }}
+          />
         ))}
         {enviando && toolCallsAtuais.length > 0 && (
           <ToolCallsBlock toolCalls={toolCallsAtuais} />
@@ -271,7 +303,15 @@ export function ChatView({ conversa }: { conversa: Conversa }) {
   )
 }
 
-function MensagemBolha({ mensagem }: { mensagem: MensagemUI }) {
+function MensagemBolha({
+  mensagem,
+  conversaId,
+  onPlanoAplicado,
+}: {
+  mensagem: MensagemUI
+  conversaId: number
+  onPlanoAplicado: () => void
+}) {
   const isUser = mensagem.role === 'user'
   return (
     <div className={cn('flex gap-3', isUser && 'flex-row-reverse')}>
@@ -281,16 +321,25 @@ function MensagemBolha({ mensagem }: { mensagem: MensagemUI }) {
       )}>
         {isUser ? <User className="h-3.5 w-3.5" /> : <Sparkles className="h-3.5 w-3.5" />}
       </div>
-      <div className={cn('max-w-[80%] space-y-2', isUser && 'items-end flex flex-col')}>
+      <div className={cn('max-w-[80%] space-y-2 flex-1', isUser && 'items-end flex flex-col flex-none')}>
         {mensagem.toolCalls && mensagem.toolCalls.length > 0 && (
           <ToolCallsBlock toolCalls={mensagem.toolCalls} />
         )}
-        <div className={cn(
-          'rounded-lg px-3 py-2 text-sm whitespace-pre-wrap',
-          isUser ? 'bg-primary text-primary-foreground' : 'bg-muted'
-        )}>
-          {mensagem.conteudo || (mensagem.pendente ? <span className="text-muted-foreground italic">…</span> : '')}
-        </div>
+        {mensagem.conteudo || mensagem.pendente ? (
+          <div className={cn(
+            'rounded-lg px-3 py-2 text-sm whitespace-pre-wrap',
+            isUser ? 'bg-primary text-primary-foreground' : 'bg-muted'
+          )}>
+            {mensagem.conteudo || <span className="text-muted-foreground italic">…</span>}
+          </div>
+        ) : null}
+        {mensagem.plano && mensagem.plano.length > 0 && !isUser && (
+          <PlanoMudancas
+            conversaId={conversaId}
+            operacoes={mensagem.plano}
+            onAplicado={onPlanoAplicado}
+          />
+        )}
       </div>
     </div>
   )

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/use-toast'
@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { ChatView } from '@/components/assistente/chat-view'
+import { IndicadorCota, type IndicadorCotaRef } from '@/components/assistente/indicador-cota'
 
 type Agente = 'ESCRITA' | 'CONSULTA'
 
@@ -55,6 +56,7 @@ export default function AssistentePage() {
   const [confirmExcluirId, setConfirmExcluirId] = useState<number | null>(null)
   const [renomeandoId, setRenomeandoId] = useState<number | null>(null)
   const [renomearValor, setRenomearValor] = useState('')
+  const indicadorCotaRef = useRef<IndicadorCotaRef>(null)
 
   const carregarConversas = useCallback(async () => {
     try {
@@ -223,12 +225,17 @@ export default function AssistentePage() {
             </>
           )}
         </div>
+        <IndicadorCota ref={indicadorCotaRef} />
       </aside>
 
       {/* Main area */}
       <main className="flex-1 flex flex-col">
         {conversaAtiva ? (
-          <ChatView key={conversaAtiva.id} conversa={conversaAtiva} />
+          <ChatView
+            key={conversaAtiva.id}
+            conversa={conversaAtiva}
+            onMensagemEnviada={() => indicadorCotaRef.current?.recarregar()}
+          />
         ) : (
           <EstadoVazio onUsarTemplate={async (agente, prompt) => {
             // Cria conversa nova e abre com o prompt pré-preenchido (via query string)
