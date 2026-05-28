@@ -19,6 +19,7 @@ import {
   CreditCard,
   Plug,
   Activity,
+  Sparkles,
 } from "lucide-react"
 import { useTheme } from "next-themes"
 import { signOut } from "next-auth/react"
@@ -85,6 +86,11 @@ const menuItems = [
     title: "Relatórios",
     href: "/dashboard/relatorios",
     icon: BarChart3,
+  },
+  {
+    title: "Assistente IA",
+    href: "/dashboard/assistente",
+    icon: Sparkles,
   },
 ]
 

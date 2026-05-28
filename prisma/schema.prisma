@@ -9,22 +9,24 @@ datasource db {
 }
 
 model Usuario {
-  id                Int                      @id @default(autoincrement())
-  nome              String                   @db.VarChar(100)
-  email             String                   @unique @db.VarChar(100)
-  senha             String                   @db.VarChar(255)
-  tipo              TipoUsuario              @default(USUARIO)
-  ativo             Boolean                  @default(true)
-  cotarPorUnidade   Boolean                  @default(false) @map("cotar_por_unidade")
-  dataCriacao       DateTime                 @default(now()) @map("data_criacao")
-  dataAtualizacao   DateTime                 @updatedAt @map("data_atualizacao")
-  cotacoes        CotacaoLog[]
+  id               Int                      @id @default(autoincrement())
+  nome             String                   @db.VarChar(100)
+  email            String                   @unique @db.VarChar(100)
+  senha            String                   @db.VarChar(255)
+  tipo             TipoUsuario              @default(USUARIO)
+  ativo            Boolean                  @default(true)
+  cotarPorUnidade  Boolean                  @default(false) @map("cotar_por_unidade")
+  dataCriacao      DateTime                 @default(now()) @map("data_criacao")
+  dataAtualizacao  DateTime                 @updatedAt @map("data_atualizacao")
+  cotacoes         CotacaoLog[]
   cotacoesProdutos CotacaoLogProduto[]
-  produtos        Produto[]                @relation("ProdutosUsuario")
-  regioes         TransportadoraRegiao[]   @relation("RegioesUsuario")
-  transportadoras Transportadora[]         @relation("TransportadorasUsuario")
-  integracoes     UsuarioIntegracaoCanal[]
-  auditorias      AuditoriaCotacao[]
+  produtos         Produto[]                @relation("ProdutosUsuario")
+  regioes          TransportadoraRegiao[]   @relation("RegioesUsuario")
+  transportadoras  Transportadora[]         @relation("TransportadorasUsuario")
+  integracoes      UsuarioIntegracaoCanal[]
+  auditorias       AuditoriaCotacao[]
+  conversas        AssistenteConversa[]
+  usosAssistente   AssistenteUsoMensal[]
 
   @@index([ativo])
   @@index([email, ativo])
@@ -266,25 +268,25 @@ model CanalIntegracao {
 }
 
 model UsuarioIntegracaoCanal {
-  id               Int             @id @default(autoincrement())
-  usuarioId        Int             @map("usuario_id")
-  canalId          Int             @map("canal_id")
-  token            String          @unique @db.VarChar(64)
-  ativo            Boolean         @default(true)
-  status           String          @default("ativo") @db.VarChar(20)
+  id               Int                @id @default(autoincrement())
+  usuarioId        Int                @map("usuario_id")
+  canalId          Int                @map("canal_id")
+  token            String             @unique @db.VarChar(64)
+  ativo            Boolean            @default(true)
+  status           String             @default("ativo") @db.VarChar(20)
   config           Json?
-  ultimaRequisicao DateTime?       @map("ultima_requisicao")
-  totalRequisicoes Int             @default(0) @map("total_requisicoes")
-  criadoEm         DateTime        @default(now()) @map("criado_em")
-  atualizadoEm     DateTime        @updatedAt @map("atualizado_em")
-  accessToken      String?         @map("access_token")
-  refreshToken     String?         @map("refresh_token")
-  scopes           String?         @map("scopes")
-  tokenExpiresAt   DateTime?       @map("token_expires_at")
+  ultimaRequisicao DateTime?          @map("ultima_requisicao")
+  totalRequisicoes Int                @default(0) @map("total_requisicoes")
+  criadoEm         DateTime           @default(now()) @map("criado_em")
+  atualizadoEm     DateTime           @updatedAt @map("atualizado_em")
+  accessToken      String?            @map("access_token")
+  refreshToken     String?            @map("refresh_token")
+  scopes           String?            @map("scopes")
+  tokenExpiresAt   DateTime?          @map("token_expires_at")
   logs             IntegracaoLog[]
   auditorias       AuditoriaCotacao[]
-  canal            CanalIntegracao @relation(fields: [canalId], references: [id], onDelete: Cascade)
-  usuario          Usuario         @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  canal            CanalIntegracao    @relation(fields: [canalId], references: [id], onDelete: Cascade)
+  usuario          Usuario            @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
 
   @@index([usuarioId, canalId])
   @@index([ativo])
@@ -315,21 +317,21 @@ model IntegracaoLog {
 }
 
 model AuditoriaCotacao {
-  id            Int                     @id @default(autoincrement())
-  tipo          TipoFalhaCotacao
-  descricao     String                  @db.VarChar(500)
-  detalhes      Json?
-  cep           String?                 @db.VarChar(9)
-  skus          String[]
-  origem        String                  @default("API") @db.VarChar(20)
-  marketplace   String?                 @db.VarChar(100)
-  integracaoId  Int?                    @map("integracao_id")
-  usuarioId     Int                     @map("usuario_id")
-  status        StatusAuditoria         @default(PENDENTE)
-  criadoEm      DateTime               @default(now()) @map("criado_em")
-  resolvidoEm   DateTime?              @map("resolvido_em")
-  integracao    UsuarioIntegracaoCanal? @relation(fields: [integracaoId], references: [id], onDelete: SetNull)
-  usuario       Usuario                 @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  id           Int                     @id @default(autoincrement())
+  tipo         TipoFalhaCotacao
+  descricao    String                  @db.VarChar(500)
+  detalhes     Json?
+  cep          String?                 @db.VarChar(9)
+  skus         String[]
+  origem       String                  @default("API") @db.VarChar(20)
+  marketplace  String?                 @db.VarChar(100)
+  integracaoId Int?                    @map("integracao_id")
+  usuarioId    Int                     @map("usuario_id")
+  status       StatusAuditoria         @default(PENDENTE)
+  criadoEm     DateTime                @default(now()) @map("criado_em")
+  resolvidoEm  DateTime?               @map("resolvido_em")
+  integracao   UsuarioIntegracaoCanal? @relation(fields: [integracaoId], references: [id], onDelete: SetNull)
+  usuario      Usuario                 @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
 
   @@index([usuarioId, status])
   @@index([tipo])
@@ -339,8 +341,8 @@ model AuditoriaCotacao {
 }
 
 enum TipoFalhaCotacao {
-  SKU_NAO_ENCONTRADO    @map("sku_nao_encontrado")
-  CEP_NAO_ATENDIDO      @map("cep_nao_atendido")
+  SKU_NAO_ENCONTRADO @map("sku_nao_encontrado")
+  CEP_NAO_ATENDIDO   @map("cep_nao_atendido")
 
   @@map("tipo_falha_cotacao")
 }
@@ -372,4 +374,61 @@ enum TipoCanal {
   WEBHOOK
 
   @@map("tipo_canal")
+}
+
+model AssistenteConversa {
+  id              Int                  @id @default(autoincrement())
+  usuarioId       Int                  @map("usuario_id")
+  agente          AgenteAssistente
+  titulo          String               @db.VarChar(200)
+  dataCriacao     DateTime             @default(now()) @map("data_criacao")
+  dataAtualizacao DateTime             @updatedAt @map("data_atualizacao")
+  usuario         Usuario              @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  mensagens       AssistenteMensagem[]
+
+  @@index([usuarioId, dataAtualizacao])
+  @@index([usuarioId, agente])
+  @@map("assistente_conversas")
+}
+
+model AssistenteMensagem {
+  id          Int                @id @default(autoincrement())
+  conversaId  Int                @map("conversa_id")
+  role        RoleMensagem
+  conteudo    String
+  toolCalls   Json?              @map("tool_calls")
+  dataCriacao DateTime           @default(now()) @map("data_criacao")
+  conversa    AssistenteConversa @relation(fields: [conversaId], references: [id], onDelete: Cascade)
+
+  @@index([conversaId, dataCriacao])
+  @@map("assistente_mensagens")
+}
+
+model AssistenteUsoMensal {
+  id              Int      @id @default(autoincrement())
+  usuarioId       Int      @map("usuario_id")
+  ano             Int
+  mes             Int
+  mensagens       Int      @default(0)
+  cotaMensal      Int      @default(200) @map("cota_mensal")
+  dataAtualizacao DateTime @updatedAt @map("data_atualizacao")
+  usuario         Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@unique([usuarioId, ano, mes])
+  @@map("assistente_uso_mensal")
+}
+
+enum AgenteAssistente {
+  ESCRITA  @map("escrita")
+  CONSULTA @map("consulta")
+
+  @@map("agente_assistente")
+}
+
+enum RoleMensagem {
+  USER      @map("user")
+  ASSISTANT @map("assistant")
+  TOOL      @map("tool")
+
+  @@map("role_mensagem")
 }
