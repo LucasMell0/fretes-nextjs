@@ -2,18 +2,6 @@ import { prisma } from '@/lib/prisma'
 import { cotacaoService } from '@/lib/services/cotacao.service'
 import type { Tool, ToolContext } from './types'
 
-// Remove acentos e normaliza para busca (espelha a normalização da UI de produtos)
-const normalizar = (s: string): string =>
-  s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
-
-const matchPorPalavra = (texto: string, query: string): boolean => {
-  const q = normalizar(query).trim()
-  if (!q) return true
-  const palavrasTexto = normalizar(texto).split(/[\s\-_.,;:/\\()|]+/).filter(Boolean)
-  const termos = q.split(/\s+/)
-  return termos.every(t => palavrasTexto.some(p => p.startsWith(t)))
-}
-
 interface BuscarProdutoArgs { query: string; limite?: number }
 
 const buscarProduto: Tool<BuscarProdutoArgs> = {
@@ -21,12 +9,12 @@ const buscarProduto: Tool<BuscarProdutoArgs> = {
     type: 'function',
     function: {
       name: 'buscar_produto',
-      description: 'Busca produtos do usuário por nome ou SKU. Retorna ao menos id, nome, sku, peso, cubagem, estoque, ativo. Use para resolver referências em linguagem natural antes de cotar.',
+      description: 'Busca produtos do usuário por nome ou SKU usando substring case-insensitive. Cada palavra da query deve aparecer no nome ou SKU. Retorna id, nome, sku, peso, cubagem, estoque, ativo. Para listar mais produtos quando os primeiros não tiveram o que o usuário procura, suba o "limite" — máximo 50.',
       parameters: {
         type: 'object',
         properties: {
-          query: { type: 'string', description: 'Texto de busca: parte do nome ou do SKU' },
-          limite: { type: 'integer', description: 'Máximo de resultados (padrão 10, máximo 20)' },
+          query: { type: 'string', description: 'Texto de busca: parte do nome ou do SKU. Cada palavra é exigida separadamente.' },
+          limite: { type: 'integer', description: 'Máximo de resultados (padrão 25, máximo 50).' },
         },
         required: ['query'],
         additionalProperties: false,
@@ -34,18 +22,48 @@ const buscarProduto: Tool<BuscarProdutoArgs> = {
     },
   },
   async execute({ query, limite }, { userId }: ToolContext) {
-    const max = Math.min(limite ?? 10, 20)
+    const max = Math.min(limite ?? 25, 50)
+    const palavras = query.trim().split(/\s+/).filter(Boolean)
+    if (palavras.length === 0) {
+      return { total: 0, produtos: [], aviso: 'Query vazia' }
+    }
     const produtos = await prisma.produto.findMany({
-      where: { usuarioId: userId, ativo: true },
+      where: {
+        usuarioId: userId,
+        ativo: true,
+        AND: palavras.map(p => ({
+          OR: [
+            { nome: { contains: p, mode: 'insensitive' as const } },
+            { sku: { contains: p, mode: 'insensitive' as const } },
+          ],
+        })),
+      },
       select: { id: true, nome: true, sku: true, peso: true, cubagem: true, estoque: true, ativo: true },
-      take: 200,
+      orderBy: { nome: 'asc' },
+      take: max,
     })
-    const filtrados = produtos
-      .filter(p => matchPorPalavra(p.nome, query) || matchPorPalavra(p.sku, query))
-      .slice(0, max)
+
+    // Verifica se há mais resultados (pra avisar o LLM)
+    const totalAproximado = produtos.length === max
+      ? await prisma.produto.count({
+          where: {
+            usuarioId: userId,
+            ativo: true,
+            AND: palavras.map(p => ({
+              OR: [
+                { nome: { contains: p, mode: 'insensitive' as const } },
+                { sku: { contains: p, mode: 'insensitive' as const } },
+              ],
+            })),
+          },
+        })
+      : produtos.length
+
     return {
-      total: filtrados.length,
-      produtos: filtrados.map(p => ({
+      total: produtos.length,
+      totalMatch: totalAproximado,
+      truncado: totalAproximado > produtos.length,
+      produtos: produtos.map(p => ({
         ...p,
         peso: Number(p.peso),
         cubagem: Number(p.cubagem),
