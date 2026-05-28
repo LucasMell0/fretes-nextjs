@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import type { Tool, ToolContext } from './types'
 import type { Operacao } from '../operacoes/schemas'
+import { buscarFaixasCep } from '../faixas-cep-brasil'
 
 /**
  * Tools do Agente de Escrita.
@@ -131,6 +132,43 @@ const obterRegiao: Tool<{ regiaoId: number }> = {
             Object.entries(r.taxas).map(([k, v]) => [k, v instanceof Date ? v.toISOString() : (typeof v === 'object' && v !== null ? Number(v) : v)])
           )
         : null,
+    }
+  },
+}
+
+const obterFaixaCep: Tool<{ query: string }> = {
+  definition: {
+    type: 'function',
+    function: {
+      name: 'obter_faixa_cep',
+      description: 'OBRIGATÓRIO antes de propor criar/editar uma região: consulta a tabela oficial de faixas de CEP do Brasil pela localidade que o usuário mencionou (ex: "Salvador", "BA capital", "Grande SP", "interior do RS"). Retorna até 8 candidatos com cepInicio/cepFim. NUNCA invente ou chute faixas de CEP.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Cidade, estado, sigla ou apelido. Ex: "Salvador", "BA capital", "Recife", "RS interior".' },
+        },
+        required: ['query'],
+        additionalProperties: false,
+      },
+    },
+  },
+  async execute({ query }) {
+    const resultados = buscarFaixasCep(query)
+    if (resultados.length === 0) {
+      return {
+        encontrados: 0,
+        aviso: `Nenhuma faixa de CEP corresponde a "${query}". Peça ao usuário pra informar diretamente o cepInicio e cepFim.`,
+      }
+    }
+    return {
+      encontrados: resultados.length,
+      faixas: resultados.map(f => ({
+        estado: f.estado,
+        sigla: f.sigla,
+        regiao: f.regiao,
+        cepInicio: f.cepInicio,
+        cepFim: f.cepFim,
+      })),
     }
   },
 }
@@ -431,6 +469,7 @@ export const escritaTools: Record<string, Tool> = {
   listar_regioes: listarRegioes as unknown as Tool,
   obter_regiao: obterRegiao as unknown as Tool,
   buscar_produto: buscarProduto as unknown as Tool,
+  obter_faixa_cep: obterFaixaCep as unknown as Tool,
   // Escrita (acumuladoras)
   propor_criar_transportadora: proporCriarTransportadora as unknown as Tool,
   propor_editar_transportadora: proporEditarTransportadora as unknown as Tool,
