@@ -79,14 +79,17 @@ class ResolvedorRefs {
     if (matchOp) {
       const idx = parseInt(matchOp[1], 10)
       const ref = this.idsPorIndice.get(idx)
-      if (!ref || ref.tipo !== 'regiao') {
-        throw new Error(`@op:${idx} não referencia uma região criada anteriormente neste plano.`)
+      if (!ref) {
+        throw new Error(`@op:${idx} não corresponde a nenhuma operação criadora anterior neste plano. Se a região JÁ EXISTE, use o ID numérico (obtido em listar_regioes).`)
+      }
+      if (ref.tipo !== 'regiao') {
+        throw new Error(`@op:${idx} referencia uma ${ref.tipo} ("${ref.nomeOriginal}"), não uma região.`)
       }
       return ref.id
     }
     const matchNome = /^@criar_regiao:(.+)$/.exec(valor)
     if (matchNome) return this.resolverPorNome(this.regioes, matchNome[1], 'Região')
-    throw new Error(`regiaoId inválido: ${valor}. Use número (ID existente) ou "@op:N" referenciando o índice da operação criadora.`)
+    throw new Error(`regiaoId inválido: "${valor}". Deve ser um número (ID existente) ou "@op:N" (referência a propor_criar_regiao deste plano).`)
   }
 
   resolverTransportadoraId(valor: number | string): number {
@@ -95,14 +98,17 @@ class ResolvedorRefs {
     if (matchOp) {
       const idx = parseInt(matchOp[1], 10)
       const ref = this.idsPorIndice.get(idx)
-      if (!ref || ref.tipo !== 'transportadora') {
-        throw new Error(`@op:${idx} não referencia uma transportadora criada anteriormente neste plano.`)
+      if (!ref) {
+        throw new Error(`@op:${idx} não corresponde a nenhuma operação criadora anterior neste plano. Se a transportadora JÁ EXISTE no banco, use o ID numérico (obtido em listar_transportadoras), não placeholder.`)
+      }
+      if (ref.tipo !== 'transportadora') {
+        throw new Error(`@op:${idx} referencia uma ${ref.tipo} ("${ref.nomeOriginal}"), não uma transportadora. Se a transportadora JÁ EXISTE, use o ID numérico dela; @op:N só vale pra criações neste mesmo plano.`)
       }
       return ref.id
     }
     const matchNome = /^@criar_transportadora:(.+)$/.exec(valor)
     if (matchNome) return this.resolverPorNome(this.transportadoras, matchNome[1], 'Transportadora')
-    throw new Error(`transportadoraId inválido: ${valor}.`)
+    throw new Error(`transportadoraId inválido: "${valor}". Deve ser um número (ID existente) ou "@op:N" (referência a propor_criar_transportadora deste plano).`)
   }
 }
 
