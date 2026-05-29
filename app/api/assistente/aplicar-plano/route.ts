@@ -28,33 +28,81 @@ class FalhaOperacao extends Error {
  * Resolve placeholders "@criar_regiao:NOME" e "@criar_transportadora:NOME" para
  * IDs reais à medida que as operações de create são executadas.
  */
-class ResolvedorRefs {
-  private regioesPorNome = new Map<string, number>()
-  private transportadorasPorNome = new Map<string, number>()
+function normalizarChave(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ')
+}
 
-  registrarRegiao(nome: string, id: number) {
-    this.regioesPorNome.set(nome.toLowerCase(), id)
+class ResolvedorRefs {
+  // Mapeia índice da operação no plano → id criado no banco
+  private idsPorIndice = new Map<number, { tipo: 'regiao' | 'transportadora'; id: number; nomeOriginal: string }>()
+  // Fallback por nome quando o LLM continuar usando @criar_regiao:NOME (compat)
+  private regioes: Array<{ chave: string; nomeOriginal: string; id: number }> = []
+  private transportadoras: Array<{ chave: string; nomeOriginal: string; id: number }> = []
+
+  registrarRegiao(indice: number, nome: string, id: number) {
+    this.idsPorIndice.set(indice, { tipo: 'regiao', id, nomeOriginal: nome })
+    this.regioes.push({ chave: normalizarChave(nome), nomeOriginal: nome, id })
   }
-  registrarTransportadora(nome: string, id: number) {
-    this.transportadorasPorNome.set(nome.toLowerCase(), id)
+  registrarTransportadora(indice: number, nome: string, id: number) {
+    this.idsPorIndice.set(indice, { tipo: 'transportadora', id, nomeOriginal: nome })
+    this.transportadoras.push({ chave: normalizarChave(nome), nomeOriginal: nome, id })
+  }
+
+  private resolverPorNome(
+    lista: Array<{ chave: string; nomeOriginal: string; id: number }>,
+    nomeBuscado: string,
+    rotulo: string
+  ): number {
+    if (lista.length === 0) {
+      throw new Error(`${rotulo} "${nomeBuscado}" não foi criada antes nesta sequência (nenhuma criação anterior).`)
+    }
+    const chaveBuscada = normalizarChave(nomeBuscado)
+    const exato = lista.find(e => e.chave === chaveBuscada)
+    if (exato) return exato.id
+    const sub = lista.find(e => e.chave.includes(chaveBuscada) || chaveBuscada.includes(e.chave))
+    if (sub) return sub.id
+    const disponiveis = lista.map(e => `"${e.nomeOriginal}"`).join(', ')
+    throw new Error(
+      `${rotulo} "${nomeBuscado}" não bate com nenhuma criada nesta sequência. Disponíveis: ${disponiveis}. Use no placeholder "@op:N" onde N é o índice (0-based) da operação que criou a região.`
+    )
   }
 
   resolverRegiaoId(valor: number | string): number {
     if (typeof valor === 'number') return valor
-    const match = /^@criar_regiao:(.+)$/.exec(valor)
-    if (!match) throw new Error(`regiaoId inválido: ${valor}`)
-    const id = this.regioesPorNome.get(match[1].toLowerCase())
-    if (!id) throw new Error(`Região "${match[1]}" não foi criada antes nesta sequência`)
-    return id
+    const matchOp = /^@op:(\d+)$/.exec(valor)
+    if (matchOp) {
+      const idx = parseInt(matchOp[1], 10)
+      const ref = this.idsPorIndice.get(idx)
+      if (!ref || ref.tipo !== 'regiao') {
+        throw new Error(`@op:${idx} não referencia uma região criada anteriormente neste plano.`)
+      }
+      return ref.id
+    }
+    const matchNome = /^@criar_regiao:(.+)$/.exec(valor)
+    if (matchNome) return this.resolverPorNome(this.regioes, matchNome[1], 'Região')
+    throw new Error(`regiaoId inválido: ${valor}. Use número (ID existente) ou "@op:N" referenciando o índice da operação criadora.`)
   }
 
   resolverTransportadoraId(valor: number | string): number {
     if (typeof valor === 'number') return valor
-    const match = /^@criar_transportadora:(.+)$/.exec(valor)
-    if (!match) throw new Error(`transportadoraId inválido: ${valor}`)
-    const id = this.transportadorasPorNome.get(match[1].toLowerCase())
-    if (!id) throw new Error(`Transportadora "${match[1]}" não foi criada antes nesta sequência`)
-    return id
+    const matchOp = /^@op:(\d+)$/.exec(valor)
+    if (matchOp) {
+      const idx = parseInt(matchOp[1], 10)
+      const ref = this.idsPorIndice.get(idx)
+      if (!ref || ref.tipo !== 'transportadora') {
+        throw new Error(`@op:${idx} não referencia uma transportadora criada anteriormente neste plano.`)
+      }
+      return ref.id
+    }
+    const matchNome = /^@criar_transportadora:(.+)$/.exec(valor)
+    if (matchNome) return this.resolverPorNome(this.transportadoras, matchNome[1], 'Transportadora')
+    throw new Error(`transportadoraId inválido: ${valor}.`)
   }
 }
 
@@ -80,7 +128,7 @@ async function aplicarOperacao(
             margemLucro: op.margemLucro,
           },
         })
-        refs.registrarTransportadora(op.nome, t.id)
+        refs.registrarTransportadora(indice, op.nome, t.id)
         return { tipo: op.tipo, resultado: { id: t.id, nome: t.nome } }
       }
       case 'editar_transportadora': {
@@ -132,7 +180,7 @@ async function aplicarOperacao(
             cepFim: normalizarCep(op.cepFim),
           },
         })
-        refs.registrarRegiao(op.nome, r.id)
+        refs.registrarRegiao(indice, op.nome, r.id)
         return { tipo: op.tipo, resultado: { id: r.id, nome: r.nome } }
       }
       case 'editar_regiao': {

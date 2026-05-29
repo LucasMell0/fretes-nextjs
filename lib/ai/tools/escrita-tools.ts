@@ -252,10 +252,10 @@ const proporCriarRegiao = makeAcumuladora(
     properties: {
       tipo: { type: 'string', enum: ['criar_regiao'] },
       transportadoraId: {
-        description: 'ID numérico de uma transportadora EXISTENTE, ou placeholder "@criar_transportadora:NOME" pra referenciar uma criada no MESMO plano.',
+        description: 'ID numérico de uma transportadora EXISTENTE, ou placeholder "@op:N" onde N é o índice (0-based) da operação propor_criar_transportadora no MESMO plano. PREFIRA @op:N — o nome pode ser editado pelo usuário e quebrar referências por nome.',
         oneOf: [
           { type: 'integer' },
-          { type: 'string', pattern: '^@criar_transportadora:.+' },
+          { type: 'string', pattern: '^@op:\\d+$' },
         ],
       },
       nome: { type: 'string' },
@@ -309,10 +309,10 @@ const proporCriarFaixaPeso = makeAcumuladora(
     properties: {
       tipo: { type: 'string', enum: ['criar_faixa_peso'] },
       regiaoId: {
-        description: 'ID numérico de uma região EXISTENTE, ou placeholder "@criar_regiao:NOME" pra referenciar uma região que está sendo criada no MESMO plano.',
+        description: 'ID numérico de uma região EXISTENTE, ou placeholder "@op:N" onde N é o índice (0-based) da operação propor_criar_regiao no MESMO plano. PREFIRA @op:N — o nome da região pode ser editado pelo usuário e quebrar referências por nome.',
         oneOf: [
           { type: 'integer' },
-          { type: 'string', pattern: '^@criar_regiao:.+' },
+          { type: 'string', pattern: '^@op:\\d+$' },
         ],
       },
       pesoInicial: { type: 'number' },
@@ -367,10 +367,10 @@ const proporDefinirKgAdicional = makeAcumuladora(
     properties: {
       tipo: { type: 'string', enum: ['definir_kg_adicional'] },
       regiaoId: {
-        description: 'ID numérico de uma região EXISTENTE, ou placeholder "@criar_regiao:NOME" pra referenciar uma região que está sendo criada no MESMO plano.',
+        description: 'ID numérico de uma região EXISTENTE, ou placeholder "@op:N" onde N é o índice (0-based) da operação propor_criar_regiao no MESMO plano. PREFIRA @op:N — o nome da região pode ser editado pelo usuário e quebrar referências por nome.',
         oneOf: [
           { type: 'integer' },
-          { type: 'string', pattern: '^@criar_regiao:.+' },
+          { type: 'string', pattern: '^@op:\\d+$' },
         ],
       },
       valorKgAdicional: { type: 'number' },
@@ -388,10 +388,10 @@ const proporDefinirTaxas = makeAcumuladora(
     properties: {
       tipo: { type: 'string', enum: ['definir_taxas'] },
       regiaoId: {
-        description: 'ID numérico de uma região EXISTENTE, ou placeholder "@criar_regiao:NOME" pra referenciar uma região que está sendo criada no MESMO plano.',
+        description: 'ID numérico de uma região EXISTENTE, ou placeholder "@op:N" onde N é o índice (0-based) da operação propor_criar_regiao no MESMO plano. PREFIRA @op:N — o nome da região pode ser editado pelo usuário e quebrar referências por nome.',
         oneOf: [
           { type: 'integer' },
-          { type: 'string', pattern: '^@criar_regiao:.+' },
+          { type: 'string', pattern: '^@op:\\d+$' },
         ],
       },
       frete: { type: 'object', properties: { tipo: { type: 'string', enum: ['PERCENTUAL', 'VALOR'] }, valor: { type: 'number' }, minimo: { type: 'number' } } },
